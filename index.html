@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>MAF — Math + Fun v5</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<nav class="topnav" id="topnav"></nav>
+
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main-content">
+    <div class="section-title" id="greeting">Welcome to MAF!</div>
+    <div class="section-sub">Your math adventure starts here.</div>
+
+    <!-- Stats row -->
+    <div class="grid-4 mb-12" id="statsRow">
+      <div class="stat-card">
+        <div class="stat-num" id="statAccuracy">—</div>
+        <div class="stat-lbl">Weekly accuracy</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statProblems">—</div>
+        <div class="stat-lbl">Problems solved</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statAvgTime">—</div>
+        <div class="stat-lbl">Avg time / problem</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statRank">—</div>
+        <div class="stat-lbl">Leaderboard rank</div>
+      </div>
+    </div>
+
+    <!-- Action cards -->
+    <div class="grid-2 mb-12">
+      <div class="card" style="background:linear-gradient(135deg,var(--ora),var(--ora-dk));border-color:var(--ora);cursor:pointer" onclick="location.href='pages/workbook_setup.html'">
+        <div class="row-between">
+          <div>
+            <div class="card-title" style="font-size:22px">Start Workbook 📝</div>
+            <div class="card-sub" style="color:#f5edd8aa">Jump into math problems</div>
+          </div>
+          <div style="font-size:40px">›</div>
+        </div>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="location.href='pages/tutor.html'">
+        <div class="card-title">AI Tutor 🤖</div>
+        <div class="card-sub">Get help on your weak spots</div>
+        <div id="tutorHint" class="badge badge-amb mt-8">Loading analysis...</div>
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card" style="cursor:pointer" onclick="location.href='pages/tutorials.html'">
+        <div class="card-title">Tutorials 📚</div>
+        <div class="card-sub">Step-by-step lessons</div>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="location.href='pages/leaderboard.html'">
+        <div class="card-title">Leaderboard 🏆</div>
+        <div class="card-sub" id="rankHint">See how you rank</div>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="location.href='pages/redeem.html'">
+        <div class="card-title">Robux 🎮</div>
+        <div class="card-sub" id="robuxHint">Track your progress</div>
+      </div>
+    </div>
+
+    <!-- Recent performance -->
+    <div class="card mt-16" id="perfCard" style="display:none">
+      <div class="card-title">Recent performance by type</div>
+      <div class="card-sub">Based on your last sessions</div>
+      <div id="perfRows"></div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav } from './js/nav.js';
+import { MockAuth, MockSessions, MockLeaderboard } from './js/mock-service.js';
+import { isFirebaseConfigured } from './js/firebase-config.js';
+import { getSessions, getLeaderboard } from './js/firebase-service.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase
+  ? JSON.parse(localStorage.getItem('maf_user') || 'null')
+  : MockAuth.current();
+
+if (!user) { location.href = 'login.html'; }
+
+await renderNav({ activePage: 'home', showSidebar: true });
+
+// Personalize greeting
+const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+const name = profile.name || user?.email?.split('@')[0] || 'there';
+document.getElementById('greeting').textContent = `Hey ${name}! 👋`;
+
+// Load sessions and compute stats
+const sessions = useFirebase
+  ? await getSessions(user.uid, 20).catch(() => [])
+  : MockSessions.get(user.uid, 20);
+
+if (sessions.length) {
+  const recent = sessions.slice(0, 7);
+  const avgAcc = Math.round(recent.reduce((s, x) => s + (x.accuracy || 0), 0) / recent.length);
+  const totalProbs = sessions.reduce((s, x) => s + (x.total || 0), 0);
+  const avgTime = (recent.reduce((s, x) => s + (x.avgTimeMs || 0), 0) / recent.length / 1000).toFixed(1);
+  document.getElementById('statAccuracy').textContent  = avgAcc + '%';
+  document.getElementById('statProblems').textContent  = totalProbs;
+  document.getElementById('statAvgTime').textContent   = avgTime + 's';
+
+  // Per-type accuracy
+  const typeMap = {};
+  sessions.forEach(s => {
+    if (!s.typeStats) return;
+    Object.entries(s.typeStats).forEach(([t, stats]) => {
+      if (!typeMap[t]) typeMap[t] = { correct: 0, total: 0 };
+      typeMap[t].correct += stats.correct || 0;
+      typeMap[t].total   += stats.total || 0;
+    });
+  });
+  const typeEntries = Object.entries(typeMap).filter(([, v]) => v.total > 0);
+  if (typeEntries.length) {
+    document.getElementById('perfCard').style.display = '';
+    const sorted = typeEntries.sort((a, b) => (a[1].correct / a[1].total) - (b[1].correct / b[1].total));
+    const worst = sorted[0];
+    document.getElementById('tutorHint').textContent = `${worst[0].replace('_',' ')} needs work`;
+    document.getElementById('perfRows').innerHTML = sorted.map(([type, stats]) => {
+      const pct   = Math.round((stats.correct / stats.total) * 100);
+      const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+      return `<div class="row-between" style="padding:7px 0;border-bottom:1px solid var(--edge)">
+        <span style="font-size:13px;color:var(--cream-dk);width:120px">${type.replace('_',' ')}</span>
+        <div class="bar-bg" style="flex:1;height:6px;margin:0 10px"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <span style="font-size:12px;color:${color};width:36px;text-align:right">${pct}%</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+// Leaderboard rank
+try {
+  const lb = useFirebase ? await getLeaderboard() : MockLeaderboard.get();
+  const rank = lb.findIndex(r => r.uid === user.uid) + 1;
+  document.getElementById('statRank').textContent = rank ? `#${rank}` : '—';
+  document.getElementById('rankHint').textContent = rank ? `You're #${rank} this week` : 'See how you rank';
+} catch {}
+</script>
+</body>
+</html>

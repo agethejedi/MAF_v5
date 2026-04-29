@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Sign In</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .login-wrap { width: 100%; max-width: 420px; padding: 24px; }
+    .login-logo { text-align:center; margin-bottom: 24px; }
+    .login-logo .big { font-family:var(--font-display); font-size:48px; color:var(--ora); }
+    .login-logo p { color:var(--muted); font-size:14px; margin-top:4px; }
+    .role-tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    .role-tab {
+      padding:10px; border-radius:var(--radius-sm); border:1px solid var(--edge);
+      background:var(--surf2); color:var(--muted); text-align:center; cursor:pointer;
+      font-weight:700; font-size:14px; transition:all .15s;
+    }
+    .role-tab.active { background:var(--ora); border-color:var(--ora); color:var(--cream); }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-logo">
+      <div class="big">MAF</div>
+      <p>Math + Fun — Sign in to continue</p>
+    </div>
+
+    <div class="card">
+      <div class="role-tabs">
+        <div class="role-tab active" id="tabChild" onclick="setRole('child')">👦 Child</div>
+        <div class="role-tab" id="tabParent" onclick="setRole('parent')">👨‍👦 Parent</div>
+      </div>
+
+      <div class="label">Email</div>
+      <input class="input mb-12" id="email" type="email" placeholder="you@example.com" autocomplete="email">
+
+      <div class="label">Password</div>
+      <input class="input mb-12" id="pwd" type="password" placeholder="password" autocomplete="current-password">
+
+      <div class="label" id="nameLabel" style="display:none">Your first name</div>
+      <input class="input mb-12" id="name" placeholder="e.g. Liam" style="display:none">
+
+      <button class="btn btn-primary btn-lg" id="signinBtn" style="width:100%" onclick="doSignIn()">Sign In</button>
+      <p class="text-muted text-sm mt-8" style="text-align:center">New? We'll create your account automatically.</p>
+    </div>
+
+    <div class="card mt-12" id="demoCard">
+      <div class="text-muted text-sm">
+        <strong style="color:var(--cream)">Demo mode</strong> — Firebase not connected.<br>
+        Any email + password works. Data stays on this device.
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module">
+  import { isFirebaseConfigured } from './js/firebase-config.js';
+  import { signInEmail, saveProfile } from './js/firebase-service.js';
+  import { MockAuth, MockProfile } from './js/mock-service.js';
+  import { toast } from './js/utils.js';
+
+  const useFirebase = isFirebaseConfigured();
+  if (useFirebase) document.getElementById('demoCard').style.display = 'none';
+
+  let role = 'child';
+  window.setRole = function(r) {
+    role = r;
+    document.getElementById('tabChild').classList.toggle('active', r === 'child');
+    document.getElementById('tabParent').classList.toggle('active', r === 'parent');
+    const showName = !useFirebase; // ask name in demo mode
+    document.getElementById('nameLabel').style.display = showName ? '' : 'none';
+    document.getElementById('name').style.display = showName ? '' : 'none';
+  };
+
+  window.doSignIn = async function() {
+    const email = document.getElementById('email').value.trim() || 'guest@local';
+    const pwd   = document.getElementById('pwd').value || 'password123';
+    const name  = document.getElementById('name').value.trim();
+
+    const btn = document.getElementById('signinBtn');
+    btn.disabled = true; btn.textContent = 'Signing in...';
+
+    try {
+      let user;
+      if (useFirebase) {
+        user = await signInEmail(email, pwd);
+        localStorage.setItem('maf_user', JSON.stringify({ uid: user.uid, email: user.email }));
+        await saveProfile(user.uid, { role, email: user.email, updatedAt: Date.now() });
+      } else {
+        user = MockAuth.signIn(email);
+        MockProfile.save(user.uid, { role, email, name: name || email.split('@')[0] });
+      }
+      // Store profile locally for quick access
+      const profile = useFirebase ? { role, email: user.email } : MockProfile.get(user.uid);
+      localStorage.setItem('maf_profile', JSON.stringify(profile));
+
+      toast('Welcome!', 'correct');
+      setTimeout(() => {
+        location.href = role === 'parent' ? 'pages/parent.html' : 'index.html';
+      }, 600);
+    } catch(e) {
+      toast('Sign in failed: ' + (e.message || 'error'), 'wrong');
+      btn.disabled = false; btn.textContent = 'Sign In';
+    }
+  };
+
+  // Enter key support
+  document.addEventListener('keydown', e => { if (e.key === 'Enter') window.doSignIn(); });
+  </script>
+</body>
+</html>

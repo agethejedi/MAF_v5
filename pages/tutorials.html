@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Tutorials</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    .tutorial-card {
+      cursor:pointer; transition:all .15s;
+      border-left:4px solid transparent;
+    }
+    .tutorial-card:hover { border-left-color:var(--ora); transform:translateX(3px); }
+    .tutorial-card.locked { opacity:.5; cursor:not-allowed; }
+    .diff-badge { font-size:10px; padding:2px 7px; border-radius:20px; margin-left:6px; }
+  </style>
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="section-title">📚 Tutorials</div>
+    <div class="section-sub">Step-by-step lessons to strengthen your weak spots. AI-personalized for you.</div>
+
+    <!-- AI recommendation -->
+    <div class="card mb-12" style="background:linear-gradient(135deg,rgba(201,86,30,.12),rgba(200,130,26,.08));border-color:var(--ora)">
+      <div class="row-between">
+        <div>
+          <div class="card-title">🤖 Recommended for you</div>
+          <div class="card-sub" id="aiRec">Loading your personalized recommendation...</div>
+        </div>
+        <button class="btn btn-primary" id="aiRecBtn" style="white-space:nowrap" onclick="location.href='tutor.html'">Start lesson →</button>
+      </div>
+    </div>
+
+    <!-- Tutorial library by topic -->
+    <div id="tutorialLibrary"></div>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav } from '../js/nav.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { MockAuth, MockSessions } from '../js/mock-service.js';
+import { getSessions } from '../js/firebase-service.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'tutorials', showSidebar: true });
+
+const TUTORIALS = [
+  { id:'add_basics',    title:'Addition Basics',       type:'add',           grades:[1,2],   diff:'easy',   emoji:'➕', desc:'Learn to add numbers step by step.' },
+  { id:'sub_basics',    title:'Subtraction Basics',    type:'sub',           grades:[1,2],   diff:'easy',   emoji:'➖', desc:'Understand taking away and finding the difference.' },
+  { id:'mul_intro',     title:'Intro to Multiplication',type:'mul',          grades:[2,3],   diff:'easy',   emoji:'✖️', desc:'Groups and repeated addition.' },
+  { id:'mul_tables',    title:'Multiplication Tables', type:'mul',           grades:[3,4],   diff:'medium', emoji:'🔢', desc:'Master the times tables up to 12.' },
+  { id:'div_intro',     title:'Division Basics',       type:'div',           grades:[3,4],   diff:'medium', emoji:'➗', desc:'Splitting into equal groups.' },
+  { id:'clock_read',    title:'Reading Clocks',        type:'clock_analog',  grades:[1,2,3], diff:'easy',   emoji:'🕒', desc:'Hour and minute hands on an analog clock.' },
+  { id:'elapsed_time',  title:'Elapsed Time',          type:'time_diff',     grades:[2,3,4], diff:'medium', emoji:'⏱️', desc:'Counting minutes and hours between two times.' },
+  { id:'word_problems', title:'Word Problem Strategies',type:'word',         grades:[2,3,4,5],diff:'medium',emoji:'📖', desc:'How to read and solve story problems.' },
+  { id:'fractions_intro',title:'Intro to Fractions',  type:'fraction',      grades:[3,4],   diff:'easy',   emoji:'🍕', desc:'Parts of a whole, numerator and denominator.' },
+  { id:'fractions_add', title:'Adding Fractions',      type:'fraction',      grades:[4,5],   diff:'medium', emoji:'🧮', desc:'Add fractions with the same denominator.' },
+  { id:'decimals_intro',title:'Understanding Decimals',type:'decimal',       grades:[4,5],   diff:'easy',   emoji:'💲', desc:'Place value and decimal notation.' },
+  { id:'percents',      title:'Percentages',           type:'percent',       grades:[5,6],   diff:'medium', emoji:'💯', desc:'Finding a percent of a number.' },
+  { id:'geometry_area', title:'Area and Perimeter',    type:'geometry',      grades:[5,6],   diff:'medium', emoji:'📐', desc:'Rectangles, triangles, and basic shapes.' },
+  { id:'algebra_intro', title:'Intro to Algebra',      type:'algebra',       grades:[6,7,8], diff:'hard',   emoji:'🔡', desc:'Variables, equations, and solving for x.' },
+];
+
+const DIFF_COLORS = { easy:'badge-grn', medium:'badge-amb', hard:'badge-red' };
+
+// Load sessions to find weak areas
+const sessions = useFirebase
+  ? await getSessions(user.uid, 30).catch(() => [])
+  : MockSessions.get(user.uid, 30);
+
+const typeMap = {};
+sessions.forEach(s => {
+  if (!s.typeStats) return;
+  Object.entries(s.typeStats).forEach(([t, stats]) => {
+    if (!typeMap[t]) typeMap[t] = { correct:0, total:0 };
+    typeMap[t].correct += stats.correct||0;
+    typeMap[t].total   += stats.total||0;
+  });
+});
+const weakTypes = Object.entries(typeMap)
+  .filter(([,v]) => v.total>0)
+  .sort((a,b) => (a[1].correct/a[1].total)-(b[1].correct/b[1].total))
+  .map(([t]) => t);
+
+// AI recommendation
+const rec = weakTypes.length
+  ? TUTORIALS.find(t => t.type === weakTypes[0])
+  : null;
+document.getElementById('aiRec').textContent = rec
+  ? `Based on your sessions, we recommend: ${rec.emoji} ${rec.title}`
+  : 'Complete a workbook session so we can recommend the right lesson for you!';
+
+// Group tutorials by category
+const CATEGORIES = [
+  { label:'🔢 Arithmetic', types:['add','sub','mul','div'] },
+  { label:'🕒 Time & Clocks', types:['clock_analog','clock_digital','time_diff'] },
+  { label:'📖 Word Problems', types:['word'] },
+  { label:'🍕 Fractions & Decimals', types:['fraction','decimal','percent'] },
+  { label:'📐 Geometry & Algebra', types:['geometry','algebra'] },
+];
+
+const lib = document.getElementById('tutorialLibrary');
+CATEGORIES.forEach(cat => {
+  const tutorials = TUTORIALS.filter(t => cat.types.includes(t.type));
+  if (!tutorials.length) return;
+  lib.innerHTML += `
+    <div class="section-title" style="font-size:18px;margin:20px 0 10px">${cat.label}</div>
+    <div class="grid-2 mb-12">
+      ${tutorials.map(t => {
+        const isWeak = weakTypes.indexOf(t.type) === 0;
+        return `<div class="card tutorial-card ${isWeak?'badge-red':''}" onclick="location.href='tutor.html?tutorial=${t.id}'"
+          style="${isWeak?'border-left-color:var(--red)':''}">
+          <div class="row-between">
+            <div>
+              <div style="font-size:24px">${t.emoji}</div>
+              <div class="card-title" style="font-size:15px;margin-top:4px">${t.title}</div>
+              <div class="card-sub">${t.desc}</div>
+              <div class="row mt-8">
+                <span class="badge text-sm">Gr ${t.grades.join(', ')}</span>
+                <span class="badge ${DIFF_COLORS[t.diff]} diff-badge">${t.diff}</span>
+                ${isWeak?'<span class="badge badge-red">Focus area</span>':''}
+              </div>
+            </div>
+            <div style="font-size:22px;color:var(--muted)">›</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Parent Dashboard</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    .stepper { display:flex; align-items:center; gap:10px; }
+    .step-btn { width:40px;height:40px;border-radius:var(--radius-sm);background:var(--bg);border:1px solid var(--edge);color:var(--cream);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
+    .step-val { font-family:var(--font-display);font-size:28px;color:var(--ora-lt);width:60px;text-align:center; }
+    .code-row { display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--edge); }
+    .code-row:last-child { border-bottom:none; }
+  </style>
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="section-title">👨‍👦 Parent Dashboard</div>
+    <div class="section-sub">Manage your child's rewards and view their progress.</div>
+
+    <div class="grid-2">
+      <!-- Left col -->
+      <div>
+        <!-- Threshold -->
+        <div class="card mb-12">
+          <div class="card-title">Robux threshold</div>
+          <div class="card-sub">Points required before a gift card code is unlocked</div>
+          <div class="stepper mt-8">
+            <button class="step-btn" id="thDec">−</button>
+            <div class="step-val" id="thVal">100</div>
+            <button class="step-btn" id="thInc">+</button>
+            <span class="text-muted text-sm" style="margin-left:8px">points</span>
+          </div>
+          <div class="text-muted text-sm mt-8" id="thNote">Loading child progress...</div>
+          <button class="btn btn-primary mt-12" id="saveThBtn">Save threshold</button>
+        </div>
+
+        <!-- Child progress -->
+        <div class="card mb-12">
+          <div class="card-title">Child progress</div>
+          <div id="childProgress"><div class="text-muted text-sm mt-8">Loading...</div></div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="card">
+          <div class="card-title">Notifications</div>
+          <div class="card-sub">Get updates on your child's performance</div>
+          <div class="label mt-8">Email address</div>
+          <input class="input mb-12" id="notifyEmail" placeholder="parent@example.com" type="email">
+          <div class="label">Phone number (SMS)</div>
+          <input class="input mb-12" id="notifyPhone" placeholder="+1 555 000 0000" type="tel">
+          <button class="btn btn-primary" id="saveNotifyBtn">Save notification settings</button>
+        </div>
+      </div>
+
+      <!-- Right col -->
+      <div>
+        <!-- Gift codes -->
+        <div class="card mb-12">
+          <div class="card-title">Gift card codes</div>
+          <div class="card-sub">Codes are served automatically when your child hits their goal.</div>
+          <div id="codesList" class="mt-8"><div class="text-muted text-sm">Loading...</div></div>
+          <hr class="divider">
+          <div class="label">Add a new code</div>
+          <div class="row mt-8">
+            <input class="input" id="newCode" placeholder="e.g. FREE-XXXX-YYYY">
+            <input class="input" id="newReward" placeholder="e.g. 400 Robux" style="max-width:140px">
+            <button class="btn btn-primary btn-sm" id="addCodeBtn">Add</button>
+          </div>
+        </div>
+
+        <!-- AI analysis -->
+        <div class="card">
+          <div class="card-title">AI performance analysis</div>
+          <div class="card-sub" id="aiSub">Loading your child's data...</div>
+          <div id="aiRows" class="mt-8"></div>
+          <button class="btn mt-12" onclick="location.href='tutor.html'">View full AI Tutor →</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav } from '../js/nav.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { getParentSettings, saveParentSettings, getSessions, getRobuxProgress } from '../js/firebase-service.js';
+import { MockAuth, MockParentSettings, MockSessions, MockRobux } from '../js/mock-service.js';
+import { toast, fmtDate } from '../js/utils.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'parent', showSidebar: true });
+
+let settings = useFirebase
+  ? await getParentSettings(user.uid).catch(() => null)
+  : MockParentSettings.get(user.uid);
+if (!settings) settings = { threshold: 100, notifyEmail: '', notifyPhone: '' };
+
+let threshold = settings.threshold || 100;
+document.getElementById('thVal').textContent      = threshold;
+document.getElementById('notifyEmail').value      = settings.notifyEmail || '';
+document.getElementById('notifyPhone').value      = settings.notifyPhone || '';
+
+// Stepper
+document.getElementById('thDec').addEventListener('click', () => {
+  threshold = Math.max(10, threshold - 10);
+  document.getElementById('thVal').textContent = threshold;
+});
+document.getElementById('thInc').addEventListener('click', () => {
+  threshold = Math.min(1000, threshold + 10);
+  document.getElementById('thVal').textContent = threshold;
+});
+
+document.getElementById('saveThBtn').addEventListener('click', async () => {
+  settings.threshold = threshold;
+  useFirebase
+    ? await saveParentSettings(user.uid, settings).catch(console.error)
+    : MockParentSettings.save(user.uid, settings);
+  toast('Threshold saved!', 'correct');
+});
+
+document.getElementById('saveNotifyBtn').addEventListener('click', async () => {
+  settings.notifyEmail = document.getElementById('notifyEmail').value.trim();
+  settings.notifyPhone = document.getElementById('notifyPhone').value.trim();
+  useFirebase
+    ? await saveParentSettings(user.uid, settings).catch(console.error)
+    : MockParentSettings.save(user.uid, settings);
+  toast('Notification settings saved!', 'correct');
+});
+
+// Child progress (using current user as example — in full build, parent links child UIDs)
+const sessions = useFirebase
+  ? await getSessions(user.uid, 20).catch(() => [])
+  : MockSessions.get(user.uid, 20);
+const progress = useFirebase
+  ? await getRobuxProgress(user.uid).catch(() => ({ points: 0 }))
+  : MockRobux.getProgress(user.uid);
+const pts = progress?.points || 0;
+const pct = Math.min(100, Math.round((pts / threshold) * 100));
+
+document.getElementById('thNote').textContent = `Child has ${pts} points (${pct}% of goal)`;
+document.getElementById('childProgress').innerHTML = sessions.length
+  ? `<div class="grid-3 mt-8">
+      <div class="stat-card"><div class="stat-num">${sessions.length}</div><div class="stat-lbl">Sessions</div></div>
+      <div class="stat-card"><div class="stat-num">${Math.round(sessions.reduce((s,x)=>s+(x.accuracy||0),0)/sessions.length)}%</div><div class="stat-lbl">Avg accuracy</div></div>
+      <div class="stat-card"><div class="stat-num">${pts}</div><div class="stat-lbl">Points earned</div></div>
+    </div>`
+  : '<div class="text-muted text-sm mt-8">No sessions completed yet.</div>';
+
+// Per-type AI analysis
+const typeMap = {};
+sessions.forEach(s => {
+  if (!s.typeStats) return;
+  Object.entries(s.typeStats).forEach(([t, stats]) => {
+    if (!typeMap[t]) typeMap[t] = { correct: 0, total: 0 };
+    typeMap[t].correct += stats.correct || 0;
+    typeMap[t].total   += stats.total   || 0;
+  });
+});
+const types = Object.entries(typeMap).filter(([,v]) => v.total > 0)
+  .sort((a,b) => (a[1].correct/a[1].total) - (b[1].correct/b[1].total));
+
+if (types.length) {
+  document.getElementById('aiSub').textContent = `Based on ${sessions.length} sessions`;
+  document.getElementById('aiRows').innerHTML = types.map(([type, s]) => {
+    const pct2 = Math.round((s.correct/s.total)*100);
+    const color = pct2>=80?'var(--green)':pct2>=60?'var(--amber)':'var(--red)';
+    return `<div class="row-between" style="padding:6px 0;border-bottom:1px solid var(--edge)">
+      <span style="font-size:13px;color:var(--cream-dk);width:130px">${type.replace('_',' ')}</span>
+      <div class="bar-bg" style="flex:1;height:5px;margin:0 10px"><div class="bar-fill" style="width:${pct2}%;background:${color}"></div></div>
+      <span style="font-size:12px;color:${color};width:36px;text-align:right">${pct2}%</span>
+    </div>`;
+  }).join('');
+} else {
+  document.getElementById('aiSub').textContent = 'Complete some workbook sessions to see analysis here.';
+}
+
+// Gift codes (mock only)
+function renderCodes() {
+  const codes = useFirebase ? [] : MockRobux.getCodes();
+  const el = document.getElementById('codesList');
+  if (!codes.length) {
+    el.innerHTML = '<div class="text-muted text-sm">No codes in inventory. Add some below.</div>';
+    return;
+  }
+  el.innerHTML = codes.map(c => `
+    <div class="code-row">
+      <span style="font-family:monospace;font-size:13px;color:${c.redeemed?'var(--muted)':'var(--ora-lt)'}">${c.code}</span>
+      <span class="badge ${c.redeemed?'':'badge-grn'}">${c.redeemed ? `Redeemed ${fmtDate(c.redeemedAt)}` : 'Available'}</span>
+    </div>`).join('');
+}
+renderCodes();
+
+document.getElementById('addCodeBtn').addEventListener('click', () => {
+  const code   = document.getElementById('newCode').value.trim().toUpperCase();
+  const reward = document.getElementById('newReward').value.trim() || '400 Robux Gift Card';
+  if (!code) { toast('Enter a code', 'wrong'); return; }
+  if (!useFirebase) {
+    MockRobux.addCode(code, reward);
+    renderCodes();
+    document.getElementById('newCode').value = '';
+    document.getElementById('newReward').value = '';
+    toast('Code added!', 'correct');
+  } else {
+    toast('Firebase code management coming soon. Use Firestore console for now.', 'wrong');
+  }
+});
+</script>
+</body>
+</html>

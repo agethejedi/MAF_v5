@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Robux Rewards</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    .progress-hero {
+      text-align:center; padding:28px 20px;
+      background:linear-gradient(135deg,rgba(201,86,30,.15),rgba(200,130,26,.1));
+      border:1px solid var(--ora); border-radius:var(--radius); margin-bottom:16px;
+    }
+    .big-pct { font-family:var(--font-display); font-size:64px; color:var(--ora-lt); line-height:1; }
+    .big-bar  { height:14px; border-radius:20px; background:var(--bg); overflow:hidden; margin:12px 0; }
+    .big-fill { height:100%; border-radius:20px; background:linear-gradient(90deg,var(--amber),var(--ora)); transition:width .8s cubic-bezier(.34,1.56,.64,1); }
+    .big-fill.done { background:linear-gradient(90deg,var(--green),#8fcf5a); }
+  </style>
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+
+    <div class="section-title">🎮 Robux Rewards</div>
+    <div class="section-sub">Earn points by completing math problems. Hit your goal to claim a gift card code!</div>
+
+    <!-- Progress hero -->
+    <div class="progress-hero">
+      <div class="big-pct" id="heroPct">0%</div>
+      <div class="text-muted text-sm mt-8" id="heroSub">Loading...</div>
+      <div class="big-bar mt-8">
+        <div class="big-fill" id="heroFill" style="width:0%"></div>
+      </div>
+      <button class="btn btn-primary btn-lg mt-12" id="claimBtn" disabled>
+        🎁 Claim your code!
+      </button>
+      <div class="text-muted text-sm mt-8" id="claimNote">Keep earning points to unlock your reward.</div>
+    </div>
+
+    <!-- Current settings -->
+    <div class="card mb-12">
+      <div class="card-title">Current goal</div>
+      <div class="grid-2 mt-8">
+        <div class="stat-card">
+          <div class="stat-num" id="setThreshold">—</div>
+          <div class="stat-lbl">Points needed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="setCodes">—</div>
+          <div class="stat-lbl">Codes available</div>
+        </div>
+      </div>
+      <div class="text-muted text-sm mt-8">
+        Points are weighted by problem type, difficulty, and grade level. Ask a parent to adjust the goal in Settings.
+      </div>
+    </div>
+
+    <!-- Redemption history -->
+    <div class="card">
+      <div class="card-title">Your reward history</div>
+      <div id="historyArea">
+        <div class="text-muted text-sm mt-8">No rewards claimed yet. Keep practicing!</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Celebration -->
+<div class="celebrate-overlay" id="celebrateOverlay">
+  <div class="celebrate-emoji">🎮</div>
+  <div class="celebrate-title">You earned it!</div>
+  <div class="celebrate-sub">Here is your Robux gift card code:</div>
+  <div class="celebrate-code" id="celebrateCode">XXXX-YYYY-ZZZZ</div>
+  <div class="celebrate-sub" style="font-size:13px;color:var(--muted)">Screenshot this or write it down!</div>
+  <button class="btn btn-primary btn-lg" onclick="closeCelebrate()">Got it! 🎉</button>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav, updateMeter } from '../js/nav.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { getRobuxProgress, claimCode, getRedemptionHistory, getParentSettings } from '../js/firebase-service.js';
+import { MockAuth, MockRobux, MockParentSettings } from '../js/mock-service.js';
+import { toast, fmtDate, playFanfare } from '../js/utils.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'redeem', showSidebar: true });
+
+async function load() {
+  const settings  = useFirebase
+    ? await getParentSettings(user.parentUid || user.uid).catch(() => null)
+    : MockParentSettings.get(user.parentUid || user.uid);
+  const threshold = settings?.threshold || 100;
+
+  const progress  = useFirebase
+    ? await getRobuxProgress(user.uid).catch(() => ({ points: 0 }))
+    : MockRobux.getProgress(user.uid);
+  const pts = progress?.points || 0;
+  const pct = Math.min(100, Math.round((pts / threshold) * 100));
+
+  document.getElementById('heroPct').textContent  = pct + '%';
+  document.getElementById('heroSub').textContent  = `${pts} of ${threshold} points earned`;
+  document.getElementById('heroFill').style.width = pct + '%';
+  document.getElementById('heroFill').classList.toggle('done', pct >= 100);
+  document.getElementById('setThreshold').textContent = threshold;
+
+  const claimBtn  = document.getElementById('claimBtn');
+  const claimNote = document.getElementById('claimNote');
+
+  if (pct >= 100) {
+    claimBtn.disabled = false;
+    claimNote.textContent = '🎉 You\'ve hit your goal! Tap above to claim your code.';
+  } else {
+    claimBtn.disabled = true;
+    claimNote.textContent = `${threshold - pts} more points to go!`;
+  }
+
+  // Available codes count (mock only — Firebase hides this for security)
+  if (!useFirebase) {
+    const codes = MockRobux.getCodes();
+    document.getElementById('setCodes').textContent = codes.filter(c => !c.redeemed).length;
+  } else {
+    document.getElementById('setCodes').textContent = '—';
+  }
+
+  // History
+  const history = useFirebase
+    ? await getRedemptionHistory(user.uid).catch(() => [])
+    : MockRobux.getHistory(user.uid);
+
+  const histEl = document.getElementById('historyArea');
+  if (history.length) {
+    histEl.innerHTML = `
+      <table class="table mt-8">
+        <thead><tr><th>Code</th><th>Reward</th><th>Date</th></tr></thead>
+        <tbody>${history.map(r => `
+          <tr>
+            <td style="font-family:monospace;color:var(--ora-lt)">${r.code}</td>
+            <td>${r.reward || 'Robux Gift Card'}</td>
+            <td>${fmtDate(r.redeemedAt)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } else {
+    histEl.innerHTML = '<div class="text-muted text-sm mt-8">No rewards claimed yet. Keep practicing!</div>';
+  }
+}
+
+document.getElementById('claimBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('claimBtn');
+  btn.disabled = true; btn.textContent = 'Claiming...';
+  try {
+    const settings  = useFirebase
+      ? await getParentSettings(user.parentUid || user.uid)
+      : MockParentSettings.get(user.parentUid || user.uid);
+    const threshold = settings?.threshold || 100;
+    const result = useFirebase
+      ? await claimCode(user.uid)
+      : MockRobux.claimCode(user.uid, threshold);
+    document.getElementById('celebrateCode').textContent = result.code;
+    document.getElementById('celebrateOverlay').classList.add('show');
+    playFanfare();
+    await load();
+    await updateMeter(user);
+  } catch(e) {
+    toast(e.message || 'Claim failed', 'wrong');
+    btn.disabled = false; btn.textContent = '🎁 Claim your code!';
+  }
+});
+
+window.closeCelebrate = function() {
+  document.getElementById('celebrateOverlay').classList.remove('show');
+};
+
+await load();
+</script>
+</body>
+</html>

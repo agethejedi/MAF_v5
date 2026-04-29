@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Leaderboard</title>
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="section-title">🏆 Leaderboard</div>
+    <div class="section-sub">Top performers ranked by weighted points earned.</div>
+
+    <div class="card" id="lbCard">
+      <div class="text-muted text-sm">Loading...</div>
+    </div>
+
+    <div class="card mt-12">
+      <div class="card-title">Your stats</div>
+      <div class="grid-3 mt-8" id="myStats">
+        <div class="stat-card"><div class="stat-num" id="myRank">—</div><div class="stat-lbl">Your rank</div></div>
+        <div class="stat-card"><div class="stat-num" id="myPts">—</div><div class="stat-lbl">Total points</div></div>
+        <div class="stat-card"><div class="stat-num" id="myAcc">—</div><div class="stat-lbl">Best accuracy</div></div>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav } from '../js/nav.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { getLeaderboard, getSessions } from '../js/firebase-service.js';
+import { MockAuth, MockLeaderboard, MockSessions } from '../js/mock-service.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'leaderboard', showSidebar: true });
+
+const lb = useFirebase
+  ? await getLeaderboard(20).catch(() => [])
+  : MockLeaderboard.get();
+
+const lbCard = document.getElementById('lbCard');
+if (!lb.length) {
+  lbCard.innerHTML = '<div class="text-muted text-sm">No scores yet — complete a workbook session to appear here!</div>';
+} else {
+  const medals = ['🥇','🥈','🥉'];
+  lbCard.innerHTML = lb.map((row, i) => `
+    <div class="lb-row ${row.uid === user.uid ? 'card' : ''}" style="${row.uid === user.uid ? 'background:rgba(201,86,30,.1);border-color:var(--ora)' : ''}">
+      <div class="lb-rank ${i < 3 ? 'top' : ''}">${medals[i] || (i+1)}</div>
+      <div class="lb-name">${row.email || row.uid} ${row.uid === user.uid ? '<span class="badge badge-ora">You</span>' : ''}</div>
+      <div class="lb-score">${row.weightedPoints || 0} pts</div>
+      <div class="badge">${row.accuracy || 0}%</div>
+    </div>
+  `).join('');
+}
+
+// My stats
+const rank = lb.findIndex(r => r.uid === user.uid) + 1;
+const sessions = useFirebase
+  ? await getSessions(user.uid, 50).catch(() => [])
+  : MockSessions.get(user.uid, 50);
+const totalPts = sessions.reduce((s, x) => s + (x.weightedPoints || 0), 0);
+const bestAcc  = sessions.length ? Math.max(...sessions.map(s => s.accuracy || 0)) : 0;
+document.getElementById('myRank').textContent = rank ? `#${rank}` : '—';
+document.getElementById('myPts').textContent  = totalPts;
+document.getElementById('myAcc').textContent  = bestAcc ? bestAcc + '%' : '—';
+</script>
+</body>
+</html>

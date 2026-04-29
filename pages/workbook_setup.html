@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Workbook Setup</title>
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="section-title">Set up your workbook</div>
+    <div class="section-sub">Choose your settings, then go!</div>
+
+    <div class="grid-2">
+      <!-- Avatar picker -->
+      <div class="card">
+        <div class="card-title">Choose your Avatar</div>
+        <div class="card-sub">Tap one to select it</div>
+        <div class="avatar-grid" id="avatarGrid"></div>
+      </div>
+
+      <!-- Settings -->
+      <div class="card">
+        <div class="card-title">Session Settings</div>
+
+        <div class="grid-2 mb-12">
+          <div>
+            <div class="label">Grade</div>
+            <select id="grade" class="input">
+              <option value="1">Grade 1</option>
+              <option value="2">Grade 2</option>
+              <option value="3" selected>Grade 3</option>
+              <option value="4">Grade 4</option>
+              <option value="5">Grade 5</option>
+              <option value="6">Grade 6</option>
+              <option value="7">Grade 7</option>
+              <option value="8">Grade 8</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Difficulty</div>
+            <select id="difficulty" class="input">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="label">Problem Types</div>
+        <div id="typeCheckboxes" class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+
+        <div class="label">Total Questions</div>
+        <select id="total" class="input mb-12">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="15">15</option>
+          <option value="20">20</option>
+        </select>
+
+        <hr class="divider">
+        <div class="row">
+          <button class="btn btn-primary btn-lg" id="startBtn">Start Workbook →</button>
+          <span class="text-muted text-sm">Stats update after each problem.</span>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav } from '../js/nav.js';
+import { typesForGrade } from '../js/utils.js';
+import { toast } from '../js/utils.js';
+import { MockAuth } from '../js/mock-service.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase
+  ? JSON.parse(localStorage.getItem('maf_user') || 'null')
+  : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'workbook', showSidebar: true });
+
+// Load saved setup
+const saved = JSON.parse(localStorage.getItem('maf_setup') || '{}');
+const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+
+if (saved.grade)      document.getElementById('grade').value = saved.grade;
+if (saved.difficulty) document.getElementById('difficulty').value = saved.difficulty;
+if (saved.total)      document.getElementById('total').value = saved.total;
+
+// Avatar grid
+let selectedAvatar = saved.avatar || profile.avatar || 'assets/avatars/a1.svg';
+const grid = document.getElementById('avatarGrid');
+for (let i = 1; i <= 12; i++) {
+  const src = `../assets/avatars/a${i}.svg`;
+  const div = document.createElement('div');
+  div.className = 'avatar-option' + (src === selectedAvatar ? ' selected' : '');
+  div.innerHTML = `<img src="${src}" alt="Avatar ${i}">`;
+  div.addEventListener('click', () => {
+    document.querySelectorAll('.avatar-option').forEach(x => x.classList.remove('selected'));
+    div.classList.add('selected');
+    selectedAvatar = src;
+  });
+  grid.appendChild(div);
+}
+
+// Problem type checkboxes — update when grade changes
+const TYPE_LABELS = {
+  add:'Addition', sub:'Subtraction', mul:'Multiplication', div:'Division',
+  clock_analog:'Analog Clock', clock_digital:'Digital Clock', time_diff:'Elapsed Time',
+  word:'Word Problems', fraction:'Fractions', decimal:'Decimals',
+  percent:'Percentages', geometry:'Geometry', algebra:'Algebra'
+};
+
+function renderTypes() {
+  const grade = parseInt(document.getElementById('grade').value, 10);
+  const available = typesForGrade(grade);
+  const savedTypes = saved.types || ['add', 'sub'];
+  const wrap = document.getElementById('typeCheckboxes');
+  wrap.innerHTML = available.map(t => `
+    <label class="badge" style="cursor:pointer;padding:8px 12px;min-height:36px">
+      <input type="checkbox" id="t_${t}" value="${t}" ${savedTypes.includes(t) || (!saved.types && ['add','sub'].includes(t)) ? 'checked' : ''}>
+      &nbsp;${TYPE_LABELS[t] || t}
+    </label>
+  `).join('');
+}
+renderTypes();
+document.getElementById('grade').addEventListener('change', renderTypes);
+
+// Start
+document.getElementById('startBtn').addEventListener('click', () => {
+  const grade      = parseInt(document.getElementById('grade').value, 10);
+  const difficulty = document.getElementById('difficulty').value;
+  const total      = parseInt(document.getElementById('total').value, 10);
+  const types      = Array.from(document.querySelectorAll('#typeCheckboxes input:checked')).map(x => x.value);
+
+  if (!types.length) { toast('Pick at least one problem type', 'wrong'); return; }
+
+  const cfg = { grade, difficulty, types, total, avatar: selectedAvatar };
+  localStorage.setItem('maf_setup', JSON.stringify(cfg));
+
+  // Also save avatar to profile
+  const prof = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+  localStorage.setItem('maf_profile', JSON.stringify({ ...prof, avatar: selectedAvatar }));
+
+  location.href = 'workbook.html';
+});
+</script>
+</body>
+</html>

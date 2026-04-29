@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Workbook</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    .wb-layout { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:700px){ .wb-layout { grid-template-columns:1fr; } }
+    .hint-box { background:var(--bg); border:1px solid var(--edge); border-radius:var(--radius-sm); padding:10px 12px; font-size:13px; color:var(--cream-dk); line-height:1.55; min-height:40px; }
+    .type-perf-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; }
+    .type-perf-row:not(:last-child) { border-bottom:1px solid var(--edge); }
+  </style>
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+
+    <!-- Active session -->
+    <div id="sessionArea">
+      <div class="wb-layout">
+
+        <!-- Left: problem -->
+        <div class="card">
+          <div class="row-between mb-12">
+            <div class="badge" id="qBadge">1 / 10</div>
+            <div class="badge badge-ora" id="streakBadge">0 streak</div>
+            <div class="badge" id="timeBadge">Avg 0.0s</div>
+          </div>
+
+          <div class="session-progress">
+            <div class="session-progress-fill" id="progressFill" style="width:0%"></div>
+          </div>
+
+          <div class="problem-box mb-12" id="problemArea">
+            <div class="problem-txt" id="problemTxt">Loading...</div>
+            <div class="problem-type" id="problemType"></div>
+          </div>
+
+          <div class="row mb-12">
+            <input class="answer-input" id="answerInput" placeholder="Your answer" autocomplete="off" inputmode="numeric">
+            <button class="btn btn-primary" id="checkBtn" style="white-space:nowrap;min-width:80px">Check ✓</button>
+          </div>
+
+          <div class="voice-strip" id="voiceStrip">
+            <div class="voice-dot"></div>
+            <div class="voice-label">Tap for AI hint</div>
+            <div class="voice-waves">
+              <div class="voice-wave-bar" style="height:6px"></div>
+              <div class="voice-wave-bar" style="height:10px"></div>
+              <div class="voice-wave-bar" style="height:6px"></div>
+              <div class="voice-wave-bar" style="height:10px"></div>
+              <div class="voice-wave-bar" style="height:6px"></div>
+            </div>
+          </div>
+          <div class="hint-box mt-8" id="hintBox" style="display:none"></div>
+        </div>
+
+        <!-- Right: live stats -->
+        <div>
+          <div class="card mb-12">
+            <div class="card-title">This session</div>
+            <div class="grid-2 mt-8">
+              <div class="stat-card"><div class="stat-num" id="liveCorrect">0</div><div class="stat-lbl">Correct</div></div>
+              <div class="stat-card"><div class="stat-num" id="liveStreak">0</div><div class="stat-lbl">Streak</div></div>
+            </div>
+            <div id="typePerfRows" class="mt-12"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">AI Tutor hint</div>
+            <div class="hint-box mt-8" id="tutorHintBox">Answer the problem and I'll help if you get stuck!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary (shown at end) -->
+    <div id="summaryArea" class="hidden">
+      <div class="card" style="max-width:600px;margin:0 auto">
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:56px" id="summaryEmoji">🎉</div>
+          <div class="section-title" id="summaryTitle">Great work!</div>
+        </div>
+        <div class="grid-3 mb-12">
+          <div class="stat-card"><div class="stat-num" id="sumAccuracy">—</div><div class="stat-lbl">Accuracy</div></div>
+          <div class="stat-card"><div class="stat-num" id="sumAvg">—</div><div class="stat-lbl">Avg time</div></div>
+          <div class="stat-card"><div class="stat-num" id="sumPoints">—</div><div class="stat-lbl">Points earned</div></div>
+        </div>
+        <div class="card mb-12" style="background:rgba(201,86,30,.1);border-color:var(--ora)">
+          <div class="row-between">
+            <div>
+              <div style="font-size:13px;color:var(--muted)">Robux progress</div>
+              <div style="font-family:var(--font-display);font-size:22px;color:var(--ora-lt)" id="sumRobux">—</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="location.href='redeem.html'">View →</button>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="row">
+          <button class="btn btn-primary" onclick="location.href='workbook_setup.html'">Another Round</button>
+          <button class="btn btn-ghost" onclick="location.href='../index.html'">Home</button>
+          <button class="btn" onclick="location.href='tutor.html'">AI Tutor</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Celebration overlay -->
+<div class="celebrate-overlay" id="celebrateOverlay">
+  <div class="celebrate-emoji">🎮</div>
+  <div class="celebrate-title">You earned a Robux reward!</div>
+  <div class="celebrate-sub">Show this code to redeem:</div>
+  <div class="celebrate-code" id="celebrateCode">XXXX-YYYY-ZZZZ</div>
+  <button class="btn btn-primary btn-lg" onclick="closeCelebrate()">Awesome! 🎉</button>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav, updateMeter } from '../js/nav.js';
+import { makeProblem, normalizeTimeString, clockSVG, fmtMs, toast, playCorrect, playWrong } from '../js/utils.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { saveSession, addRobuxPoints, getRobuxProgress, claimCode, getParentSettings, calcPoints } from '../js/firebase-service.js';
+import { MockAuth, MockSessions, MockRobux, MockParentSettings } from '../js/mock-service.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'workbook', showSidebar: true });
+
+const cfg = JSON.parse(localStorage.getItem('maf_setup') || '{}');
+const state = {
+  grade:      cfg.grade      || 3,
+  difficulty: cfg.difficulty || 'easy',
+  types:      cfg.types      || ['add','sub'],
+  total:      cfg.total      || 10,
+  avatar:     cfg.avatar     || 'assets/avatars/a1.svg',
+  idx: 0, correct: 0, streak: 0, times: [], current: null,
+  startedAt: 0, typeStats: {}, sessionPoints: 0
+};
+
+// Update avatar in nav
+const navAv = document.querySelector('.nav-avatar img');
+if (navAv) navAv.src = '../' + state.avatar;
+
+function renderProblem(p) {
+  const area = document.getElementById('problemArea');
+  document.getElementById('problemType').textContent =
+    `${p.type.replace('_',' ')} · ${state.difficulty} · Grade ${state.grade}`;
+  if (p.mode === 'time-analog') {
+    area.innerHTML = `<div class="clock-wrap">${clockSVG(p.shown, 160)}<div class="problem-txt">${p.question}</div></div>`;
+  } else if (p.mode === 'time-digital') {
+    area.innerHTML = `<div class="problem-txt">${p.question}</div><div style="font-size:32px;margin-top:8px;color:var(--ora-lt)">🕒 ${p.shown}</div>`;
+  } else {
+    area.innerHTML = `<div class="problem-txt" id="problemTxt">${p.question}</div><div class="problem-type" id="problemType">${p.type.replace('_',' ')} · ${state.difficulty}</div>`;
+  }
+  // Show hint if problem has one
+  const hintBox = document.getElementById('hintBox');
+  if (p.hint) {
+    hintBox.textContent = '💡 ' + p.hint;
+    hintBox.style.display = '';
+  } else {
+    hintBox.style.display = 'none';
+  }
+}
+
+function nextProblem() {
+  if (state.idx >= state.total) { finish(); return; }
+  const p = makeProblem({ grade: state.grade, types: state.types, difficulty: state.difficulty });
+  state.current = p;
+  state.idx++;
+  document.getElementById('qBadge').textContent       = `${state.idx} / ${state.total}`;
+  document.getElementById('progressFill').style.width = `${((state.idx-1) / state.total) * 100}%`;
+  renderProblem(p);
+  document.getElementById('answerInput').value = '';
+  document.getElementById('answerInput').focus();
+  document.getElementById('tutorHintBox').textContent = 'Answer the problem and I\'ll help if you get stuck!';
+  state.startedAt = performance.now();
+}
+
+function parseAnswer(p, raw) {
+  if (p.mode === 'decimal') return parseFloat(raw);
+  if (p.mode === 'numeric') return parseInt(raw, 10);
+  if (p.mode === 'time-digital' || p.mode === 'time-analog') return normalizeTimeString(raw);
+  return raw;
+}
+
+function isCorrect(p, val) {
+  if (p.mode === 'decimal') return Math.abs(val - p.answer) < 0.001;
+  if (p.mode === 'numeric') return val === p.answer;
+  if (p.mode === 'time-digital' || p.mode === 'time-analog')
+    return normalizeTimeString(String(val)) === normalizeTimeString(String(p.answer));
+  return val === p.answer;
+}
+
+function updateTypePerfRows() {
+  const rows = Object.entries(state.typeStats).map(([type, s]) => {
+    const pct = s.total ? Math.round((s.correct / s.total) * 100) : 0;
+    const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+    return `<div class="type-perf-row">
+      <span style="font-size:12px;color:var(--cream-dk)">${type.replace('_',' ')}</span>
+      <div class="bar-bg" style="flex:1;height:4px;margin:0 8px"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span style="font-size:11px;color:${color}">${pct}%</span>
+    </div>`;
+  }).join('');
+  document.getElementById('typePerfRows').innerHTML = rows;
+}
+
+function check() {
+  const raw     = document.getElementById('answerInput').value.trim();
+  const elapsed = performance.now() - state.startedAt;
+  state.times.push(elapsed);
+  const p   = state.current;
+  const ans = parseAnswer(p, raw);
+  if (raw === '' || (p.mode === 'numeric' && isNaN(ans))) { toast('Enter an answer', 'wrong'); return; }
+
+  // Track per-type
+  if (!state.typeStats[p.type]) state.typeStats[p.type] = { correct: 0, total: 0, timeMs: [] };
+  state.typeStats[p.type].total++;
+  state.typeStats[p.type].timeMs.push(elapsed);
+
+  const pts = calcPoints(p.type, state.difficulty, state.grade, null);
+
+  if (isCorrect(p, ans)) {
+    state.correct++;
+    state.streak++;
+    state.sessionPoints += pts;
+    state.typeStats[p.type].correct++;
+    playCorrect();
+    toast(`✓ Correct! +${pts} pts`, 'correct');
+    document.getElementById('tutorHintBox').textContent = '🌟 Excellent! Keep it up!';
+  } else {
+    state.streak = 0;
+    playWrong();
+    toast(`✗ Answer: ${p.answer}`, 'wrong');
+    document.getElementById('tutorHintBox').textContent =
+      `The answer was ${p.answer}. ${p.hint ? '💡 ' + p.hint : 'Try the next one!'}`;
+  }
+
+  document.getElementById('liveCorrect').textContent = state.correct;
+  document.getElementById('liveStreak').textContent  = state.streak;
+  document.getElementById('streakBadge').textContent  = `${state.streak} streak`;
+  document.getElementById('timeBadge').textContent   = `Avg ${fmtMs(state.times.reduce((a,b)=>a+b,0)/state.times.length)}`;
+  updateTypePerfRows();
+  nextProblem();
+}
+
+async function finish() {
+  const accuracy   = Math.round((state.correct / state.total) * 100);
+  const avgTimeMs  = Math.round(state.times.reduce((a,b)=>a+b,0) / state.times.length);
+  const sessionData = {
+    accuracy, avgTimeMs, grade: state.grade, total: state.total,
+    difficulty: state.difficulty, types: state.types,
+    typeStats: state.typeStats, weightedPoints: state.sessionPoints
+  };
+
+  // Save session
+  if (useFirebase) {
+    await saveSession(user.uid, sessionData).catch(console.error);
+    await addRobuxPoints(user.uid, state.sessionPoints).catch(console.error);
+  } else {
+    MockSessions.save(user.uid, sessionData);
+    MockRobux.addPoints(user.uid, state.sessionPoints);
+  }
+
+  // Check threshold
+  const settings  = useFirebase
+    ? await getParentSettings(user.parentUid || user.uid).catch(() => null)
+    : MockParentSettings.get(user.parentUid || user.uid);
+  const threshold = settings?.threshold || 100;
+  const progress  = useFirebase
+    ? await getRobuxProgress(user.uid).catch(() => ({ points: 0 }))
+    : MockRobux.getProgress(user.uid);
+  const totalPts  = progress?.points || 0;
+  const pct       = Math.min(100, Math.round((totalPts / threshold) * 100));
+
+  // Show summary
+  document.getElementById('sessionArea').classList.add('hidden');
+  document.getElementById('summaryArea').classList.remove('hidden');
+  document.getElementById('sumAccuracy').textContent = accuracy + '%';
+  document.getElementById('sumAvg').textContent      = fmtMs(avgTimeMs);
+  document.getElementById('sumPoints').textContent   = '+' + state.sessionPoints;
+  document.getElementById('sumRobux').textContent    = `${pct}% toward next reward`;
+  document.getElementById('summaryEmoji').textContent = accuracy >= 90 ? '🌟' : accuracy >= 70 ? '🎉' : '💪';
+  document.getElementById('summaryTitle').textContent = accuracy >= 90 ? 'Amazing work!' : accuracy >= 70 ? 'Great job!' : 'Keep practicing!';
+
+  await updateMeter(user);
+
+  // Auto-claim if at threshold
+  if (totalPts >= threshold) {
+    try {
+      const result = useFirebase
+        ? await claimCode(user.uid)
+        : MockRobux.claimCode(user.uid, threshold);
+      document.getElementById('celebrateCode').textContent = result.code;
+      document.getElementById('celebrateOverlay').classList.add('show');
+      const { playFanfare } = await import('../js/utils.js');
+      playFanfare();
+      await updateMeter(user);
+    } catch (e) {
+      toast('🎁 You hit your goal! Go to Robux page to claim.', 'correct');
+    }
+  }
+}
+
+window.closeCelebrate = function() {
+  document.getElementById('celebrateOverlay').classList.remove('show');
+};
+
+// Wire up
+document.getElementById('checkBtn').addEventListener('click', check);
+document.getElementById('answerInput').addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+document.getElementById('voiceStrip').addEventListener('click', () => {
+  const p = state.current;
+  if (!p) return;
+  const hintBox = document.getElementById('tutorHintBox');
+  hintBox.textContent = p.hint ? `💡 ${p.hint}` : `Try working through it step by step. The answer is a number between 0 and 1000.`;
+  toast('Hint shown!');
+});
+
+nextProblem();
+</script>
+</body>
+</html>
