@@ -6,12 +6,12 @@
 // ─────────────────────────────────────────────────────────────
 
 export const firebaseConfig = {
-  apiKey:            "__FIREBASE_API_KEY__",
-  authDomain:        "__FIREBASE_AUTH_DOMAIN__",
-  projectId:         "__FIREBASE_PROJECT_ID__",
-  storageBucket:     "__FIREBASE_STORAGE_BUCKET__",
-  messagingSenderId: "__FIREBASE_MESSAGING_SENDER_ID__",
-  appId:             "__FIREBASE_APP_ID__"
+  apiKey:            "AIzaSyDQ0NXtqLJeR-DSSmJ1YY2PNylfdA90OyY",
+  authDomain:        "maf-31-webbackend.firebaseapp.com",
+  projectId:         "maf-31-webbackend",
+  storageBucket:     "maf-31-webbackend.firebasestorage.app",
+  messagingSenderId: "899771106696",
+  appId:             "1:899771106696:web:d262f80d673efa69a0263d"
 };
 
 export function isFirebaseConfigured() {
