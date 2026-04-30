@@ -1,25 +1,26 @@
 // worker/index.js — MAF AI Tutor Proxy
 // Deployed to: mafv5.agedotcom.workers.dev
-//
-// Sits between the MAF app and the Anthropic API.
-// ANTHROPIC_API_KEY lives here only — never in the browser.
-//
-// To set the secret:
-//   npx wrangler secret put ANTHROPIC_API_KEY
-// Then paste your key when prompted.
 
 export default {
   async fetch(request, env) {
 
-    // CORS preflight
+    const origin = request.headers.get('Origin') || '*';
+
+    // CORS preflight — must respond to OPTIONS before anything else
     if (request.method === 'OPTIONS') {
-      return corsResponse(null, 204);
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders(origin)
+      });
     }
 
     // Only accept POST to /chat
     const url = new URL(request.url);
     if (request.method !== 'POST' || url.pathname !== '/chat') {
-      return corsResponse(JSON.stringify({ error: 'Not found' }), 404);
+      return new Response(JSON.stringify({ error: 'Not found' }), {
+        status: 404,
+        headers: corsHeaders(origin)
+      });
     }
 
     // Parse request body
@@ -27,13 +28,19 @@ export default {
     try {
       body = await request.json();
     } catch {
-      return corsResponse(JSON.stringify({ error: 'Invalid JSON' }), 400);
+      return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+        status: 400,
+        headers: corsHeaders(origin)
+      });
     }
 
     const { messages, system, max_tokens } = body;
 
     if (!messages || !Array.isArray(messages)) {
-      return corsResponse(JSON.stringify({ error: 'messages array required' }), 400);
+      return new Response(JSON.stringify({ error: 'messages array required' }), {
+        status: 400,
+        headers: corsHeaders(origin)
+      });
     }
 
     // Call Anthropic API
@@ -57,29 +64,33 @@ export default {
 
       if (!anthropicRes.ok) {
         console.error('Anthropic error:', JSON.stringify(data));
-        return corsResponse(
+        return new Response(
           JSON.stringify({ error: data.error?.message || 'Anthropic API error' }),
-          anthropicRes.status
+          { status: anthropicRes.status, headers: corsHeaders(origin) }
         );
       }
 
-      return corsResponse(JSON.stringify(data), 200);
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: corsHeaders(origin)
+      });
 
     } catch (err) {
       console.error('Worker error:', err);
-      return corsResponse(JSON.stringify({ error: 'Worker error: ' + err.message }), 500);
+      return new Response(JSON.stringify({ error: 'Worker error: ' + err.message }), {
+        status: 500,
+        headers: corsHeaders(origin)
+      });
     }
   }
 };
 
-function corsResponse(body, status = 200) {
-  return new Response(body, {
-    status,
-    headers: {
-      'Access-Control-Allow-Origin':  '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Content-Type':                 'application/json',
-    }
-  });
+// Reflect the request origin back — allows any Pages/localhost origin
+function corsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin':  origin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type':                 'application/json',
+  };
 }
