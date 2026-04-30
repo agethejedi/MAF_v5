@@ -303,3 +303,4 @@ export async function getUidByUsername(username) {
     return snap.exists() ? snap.data().uid : null;
   } catch { return null; }
 }
+
