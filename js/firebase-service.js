@@ -237,3 +237,69 @@ export function calcPoints(type, difficulty, grade, pointValues) {
 }
 
 export { init as initFirebase, isFirebaseConfigured };
+
+// ── USERNAME SYSTEM ───────────────────────────────────────────
+
+export async function isUsernameAvailable(username) {
+  await init();
+  const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  try {
+    const snap = await getDoc(doc(_db, 'usernames', username.toLowerCase()));
+    return !snap.exists();
+  } catch { return false; }
+}
+
+export async function claimUsername(uid, username) {
+  await init();
+  const {
+    doc, getDoc, setDoc, deleteDoc, runTransaction, serverTimestamp
+  } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+
+  const usernameLC  = username.toLowerCase();
+  const usernameRef = doc(_db, 'usernames', usernameLC);
+  const userRef     = doc(_db, 'users', uid);
+
+  return runTransaction(_db, async (tx) => {
+    // Check availability
+    const existing = await tx.get(usernameRef);
+    if (existing.exists() && existing.data().uid !== uid) {
+      throw new Error('Username already taken. Please choose another.');
+    }
+    // Get current user to find old username
+    const userSnap = await tx.get(userRef);
+    const oldUsernameLC = userSnap.exists() ? userSnap.data().usernameLC : null;
+
+    // Release old username if different
+    if (oldUsernameLC && oldUsernameLC !== usernameLC) {
+      tx.delete(doc(_db, 'usernames', oldUsernameLC));
+    }
+
+    // Claim new username
+    tx.set(usernameRef, { uid, claimedAt: serverTimestamp() });
+
+    // Update user profile
+    tx.set(userRef, {
+      username,
+      usernameLC,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  });
+}
+
+export async function getUsernameByUid(uid) {
+  await init();
+  const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  try {
+    const snap = await getDoc(doc(_db, 'users', uid));
+    return snap.exists() ? (snap.data().username || null) : null;
+  } catch { return null; }
+}
+
+export async function getUidByUsername(username) {
+  await init();
+  const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  try {
+    const snap = await getDoc(doc(_db, 'usernames', username.toLowerCase()));
+    return snap.exists() ? snap.data().uid : null;
+  } catch { return null; }
+}

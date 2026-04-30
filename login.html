@@ -6,109 +6,310 @@
   <title>MAF — Sign In</title>
   <link rel="stylesheet" href="css/styles.css">
   <style>
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .login-wrap { width: 100%; max-width: 420px; padding: 24px; }
-    .login-logo { text-align:center; margin-bottom: 24px; }
-    .login-logo .big { font-family:var(--font-display); font-size:48px; color:var(--ora); }
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .login-wrap { width:100%; max-width:460px; padding:24px; }
+    .login-logo { text-align:center; margin-bottom:24px; }
+    .login-logo .big { font-family:var(--font-display); font-size:56px; color:var(--ora); }
     .login-logo p { color:var(--muted); font-size:14px; margin-top:4px; }
     .role-tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
-    .role-tab {
-      padding:10px; border-radius:var(--radius-sm); border:1px solid var(--edge);
+    .role-tab { padding:10px; border-radius:var(--radius-sm); border:1px solid var(--edge);
       background:var(--surf2); color:var(--muted); text-align:center; cursor:pointer;
-      font-weight:700; font-size:14px; transition:all .15s;
-    }
+      font-weight:700; font-size:14px; transition:all .15s; }
     .role-tab.active { background:var(--ora); border-color:var(--ora); color:var(--cream); }
+    .step { display:none; }
+    .step.active { display:block; }
+    .username-suggestions { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+    .username-chip {
+      background:var(--surf2); border:1px solid var(--edge); color:var(--cream-dk);
+      padding:7px 12px; border-radius:30px; font-size:13px; cursor:pointer;
+      transition:all .15s; font-weight:600;
+    }
+    .username-chip:hover, .username-chip.selected {
+      background:var(--ora); border-color:var(--ora); color:var(--cream);
+    }
+    .username-check { font-size:12px; margin-top:6px; min-height:18px; }
+    .check-ok  { color:var(--green); }
+    .check-err { color:var(--red); }
+    .divider-text {
+      text-align:center; color:var(--muted); font-size:12px; margin:10px 0;
+      position:relative;
+    }
+    .divider-text::before, .divider-text::after {
+      content:''; position:absolute; top:50%; width:42%; height:1px;
+      background:var(--edge);
+    }
+    .divider-text::before { left:0; }
+    .divider-text::after  { right:0; }
   </style>
 </head>
 <body>
-  <div class="login-wrap">
-    <div class="login-logo">
-      <div class="big">MAF</div>
-      <p>Math + Fun — Sign in to continue</p>
-    </div>
-
-    <div class="card">
-      <div class="role-tabs">
-        <div class="role-tab active" id="tabChild" onclick="setRole('child')">👦 Child</div>
-        <div class="role-tab" id="tabParent" onclick="setRole('parent')">👨‍👦 Parent</div>
-      </div>
-
-      <div class="label">Email</div>
-      <input class="input mb-12" id="email" type="email" placeholder="you@example.com" autocomplete="email">
-
-      <div class="label">Password</div>
-      <input class="input mb-12" id="pwd" type="password" placeholder="password" autocomplete="current-password">
-
-      <div class="label" id="nameLabel" style="display:none">Your first name</div>
-      <input class="input mb-12" id="name" placeholder="e.g. Liam" style="display:none">
-
-      <button class="btn btn-primary btn-lg" id="signinBtn" style="width:100%" onclick="doSignIn()">Sign In</button>
-      <p class="text-muted text-sm mt-8" style="text-align:center">New? We'll create your account automatically.</p>
-    </div>
-
-    <div class="card mt-12" id="demoCard">
-      <div class="text-muted text-sm">
-        <strong style="color:var(--cream)">Demo mode</strong> — Firebase not connected.<br>
-        Any email + password works. Data stays on this device.
-      </div>
-    </div>
+<div class="login-wrap">
+  <div class="login-logo">
+    <div class="big">MAF</div>
+    <p>Math + Fun — Sign in to continue</p>
   </div>
 
-  <div id="toast" class="toast"></div>
+  <!-- Step 1: Email + Password + Role -->
+  <div class="card step active" id="step1">
+    <div class="role-tabs">
+      <div class="role-tab active" id="tabChild" onclick="setRole('child')">👦 Child</div>
+      <div class="role-tab" id="tabParent" onclick="setRole('parent')">👨‍👦 Parent</div>
+    </div>
+    <div class="label">Email</div>
+    <input class="input mb-12" id="email" type="email" placeholder="you@example.com" autocomplete="email">
+    <div class="label">Password</div>
+    <input class="input mb-12" id="pwd" type="password" placeholder="password" autocomplete="current-password">
+    <button class="btn btn-primary btn-lg" id="step1Btn" style="width:100%">Continue →</button>
+    <p class="text-muted text-sm mt-8" style="text-align:center">
+      New? We'll create your account and let you pick a username.
+    </p>
+  </div>
 
-  <script type="module">
-  import { isFirebaseConfigured } from './js/firebase-config.js';
-  import { signInEmail, saveProfile } from './js/firebase-service.js';
-  import { MockAuth, MockProfile } from './js/mock-service.js';
-  import { toast } from './js/utils.js';
+  <!-- Step 2: Username picker (new users only) -->
+  <div class="card step" id="step2">
+    <div class="card-title">Pick your username</div>
+    <div class="card-sub">This is how you'll appear on the leaderboard — never your email.</div>
 
-  const useFirebase = isFirebaseConfigured();
-  if (useFirebase) document.getElementById('demoCard').style.display = 'none';
+    <div class="label mt-8">Suggested usernames</div>
+    <div class="username-suggestions" id="suggestions"></div>
 
-  let role = 'child';
-  window.setRole = function(r) {
-    role = r;
-    document.getElementById('tabChild').classList.toggle('active', r === 'child');
-    document.getElementById('tabParent').classList.toggle('active', r === 'parent');
-    const showName = !useFirebase; // ask name in demo mode
-    document.getElementById('nameLabel').style.display = showName ? '' : 'none';
-    document.getElementById('name').style.display = showName ? '' : 'none';
-  };
+    <div class="divider-text">or choose your own</div>
 
-  window.doSignIn = async function() {
-    const email = document.getElementById('email').value.trim() || 'guest@local';
-    const pwd   = document.getElementById('pwd').value || 'password123';
-    const name  = document.getElementById('name').value.trim();
+    <input class="input" id="usernameInput" placeholder="e.g. SwiftFox42" maxlength="20"
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <div class="username-check" id="usernameCheck"></div>
 
-    const btn = document.getElementById('signinBtn');
-    btn.disabled = true; btn.textContent = 'Signing in...';
+    <button class="btn btn-primary btn-lg mt-12" id="step2Btn" style="width:100%" disabled>
+      Create account →
+    </button>
+    <button class="btn btn-ghost btn-sm mt-8" style="width:100%" onclick="goBack()">← Back</button>
+  </div>
 
-    try {
-      let user;
-      if (useFirebase) {
-        user = await signInEmail(email, pwd);
-        localStorage.setItem('maf_user', JSON.stringify({ uid: user.uid, email: user.email }));
-        await saveProfile(user.uid, { role, email: user.email, updatedAt: Date.now() });
-      } else {
-        user = MockAuth.signIn(email);
-        MockProfile.save(user.uid, { role, email, name: name || email.split('@')[0] });
+  <div class="card mt-12" id="demoCard">
+    <div class="text-muted text-sm">
+      <strong style="color:var(--cream)">Demo mode</strong> — Firebase not connected.<br>
+      Any email + password works. Data stays on this device.
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { isFirebaseConfigured } from './js/firebase-config.js';
+import { signInEmail, saveProfile, getProfile, isUsernameAvailable, claimUsername } from './js/firebase-service.js';
+import { MockAuth, MockProfile, MockUsername } from './js/mock-service.js';
+import { generateUsernames, validateUsername, containsProfanity } from './js/username.js';
+import { toast } from './js/utils.js';
+
+const useFirebase = isFirebaseConfigured();
+if (useFirebase) document.getElementById('demoCard').style.display = 'none';
+
+let role = 'child';
+let selectedUsername = '';
+let isNewUser = false;
+let currentUser = null;
+
+window.setRole = function(r) {
+  role = r;
+  document.getElementById('tabChild').classList.toggle('active', r === 'child');
+  document.getElementById('tabParent').classList.toggle('active', r === 'parent');
+};
+
+// ── STEP 1: Sign in or create account ────────────────────────
+document.getElementById('step1Btn').addEventListener('click', async () => {
+  const email = document.getElementById('email').value.trim();
+  const pwd   = document.getElementById('pwd').value;
+  if (!email) { toast('Enter your email', 'wrong'); return; }
+  if (!pwd)   { toast('Enter your password', 'wrong'); return; }
+
+  const btn = document.getElementById('step1Btn');
+  btn.disabled = true; btn.textContent = 'Checking...';
+
+  try {
+    if (useFirebase) {
+      const { initFirebase } = await import('./js/firebase-service.js');
+      await initFirebase();
+      const { signInWithEmailAndPassword, createUserWithEmailAndPassword, getAuth } =
+        await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+      const auth = getAuth();
+      try {
+        // Try sign in first
+        const cred = await signInWithEmailAndPassword(auth, email, pwd);
+        currentUser = cred.user;
+        isNewUser = false;
+      } catch(e) {
+        // New user — create account
+        const cred = await createUserWithEmailAndPassword(auth, email, pwd);
+        currentUser = cred.user;
+        isNewUser = true;
       }
-      // Store profile locally for quick access
-      const profile = useFirebase ? { role, email: user.email } : MockProfile.get(user.uid);
-      localStorage.setItem('maf_profile', JSON.stringify(profile));
+      localStorage.setItem('maf_user', JSON.stringify({ uid: currentUser.uid, email: currentUser.email }));
 
-      toast('Welcome!', 'correct');
-      setTimeout(() => {
-        location.href = role === 'parent' ? 'pages/parent.html' : 'index.html';
-      }, 600);
-    } catch(e) {
-      toast('Sign in failed: ' + (e.message || 'error'), 'wrong');
-      btn.disabled = false; btn.textContent = 'Sign In';
+      // Check if existing user already has a username
+      if (!isNewUser) {
+        const profile = await getProfile(currentUser.uid);
+        if (profile?.username) {
+          // Already has username — go straight to app
+          await saveProfile(currentUser.uid, { role, email: currentUser.email });
+          localStorage.setItem('maf_profile', JSON.stringify({ ...profile, role }));
+          toast('Welcome back!', 'correct');
+          setTimeout(() => { location.href = role === 'parent' ? 'pages/parent.html' : 'index.html'; }, 500);
+          return;
+        }
+      }
+    } else {
+      currentUser = MockAuth.signIn(email);
+      const profile = MockProfile.get(currentUser.uid);
+      isNewUser = !profile?.username;
+      if (!isNewUser) {
+        localStorage.setItem('maf_profile', JSON.stringify({ ...profile, role }));
+        toast('Welcome back!', 'correct');
+        setTimeout(() => { location.href = role === 'parent' ? 'pages/parent.html' : 'index.html'; }, 500);
+        return;
+      }
     }
-  };
 
-  // Enter key support
-  document.addEventListener('keydown', e => { if (e.key === 'Enter') window.doSignIn(); });
-  </script>
+    // New user — show username picker
+    showStep2();
+
+  } catch(e) {
+    toast('Sign in failed: ' + (e.message || 'error'), 'wrong');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Continue →';
+  }
+});
+
+// ── STEP 2: Username picker ───────────────────────────────────
+function showStep2() {
+  document.getElementById('step1').classList.remove('active');
+  document.getElementById('step2').classList.add('active');
+
+  // Generate suggestions
+  const suggestions = generateUsernames(4);
+  const wrap = document.getElementById('suggestions');
+  wrap.innerHTML = suggestions.map(u => `
+    <div class="username-chip" onclick="selectSuggestion('${u}')">${u}</div>
+  `).join('');
+}
+
+window.selectSuggestion = function(name) {
+  document.querySelectorAll('.username-chip').forEach(c => c.classList.remove('selected'));
+  event.target.classList.add('selected');
+  document.getElementById('usernameInput').value = name;
+  selectedUsername = name;
+  checkUsername(name);
+};
+
+window.goBack = function() {
+  document.getElementById('step2').classList.remove('active');
+  document.getElementById('step1').classList.add('active');
+};
+
+// Real-time username availability check
+let checkTimer;
+document.getElementById('usernameInput').addEventListener('input', (e) => {
+  const val = e.target.value.trim();
+  selectedUsername = val;
+  // Deselect chips
+  document.querySelectorAll('.username-chip').forEach(c => c.classList.remove('selected'));
+  clearTimeout(checkTimer);
+  if (!val) {
+    document.getElementById('usernameCheck').textContent = '';
+    document.getElementById('step2Btn').disabled = true;
+    return;
+  }
+  document.getElementById('usernameCheck').textContent = 'Checking...';
+  document.getElementById('usernameCheck').className = 'username-check';
+  checkTimer = setTimeout(() => checkUsername(val), 500);
+});
+
+async function checkUsername(username) {
+  const checkEl = document.getElementById('usernameCheck');
+  const btn     = document.getElementById('step2Btn');
+
+  const validation = validateUsername(username);
+  if (!validation.ok) {
+    checkEl.textContent = '✗ ' + validation.reason;
+    checkEl.className = 'username-check check-err';
+    btn.disabled = true;
+    return;
+  }
+
+  try {
+    const available = useFirebase
+      ? await isUsernameAvailable(username)
+      : MockUsername.isAvailable(username);
+
+    if (available) {
+      checkEl.textContent = '✓ ' + username + ' is available!';
+      checkEl.className = 'username-check check-ok';
+      btn.disabled = false;
+      selectedUsername = username;
+    } else {
+      checkEl.textContent = '✗ That username is already taken.';
+      checkEl.className = 'username-check check-err';
+      btn.disabled = true;
+    }
+  } catch {
+    checkEl.textContent = 'Could not check availability.';
+    btn.disabled = true;
+  }
+}
+
+// ── STEP 2: Create account with username ──────────────────────
+document.getElementById('step2Btn').addEventListener('click', async () => {
+  if (!selectedUsername) { toast('Pick a username first', 'wrong'); return; }
+
+  const btn = document.getElementById('step2Btn');
+  btn.disabled = true; btn.textContent = 'Creating account...';
+
+  try {
+    if (useFirebase) {
+      await claimUsername(currentUser.uid, selectedUsername);
+      await saveProfile(currentUser.uid, {
+        role,
+        email: currentUser.email,
+        username: selectedUsername,
+        usernameLC: selectedUsername.toLowerCase()
+      });
+      localStorage.setItem('maf_profile', JSON.stringify({
+        role, email: currentUser.email,
+        username: selectedUsername,
+        usernameLC: selectedUsername.toLowerCase()
+      }));
+    } else {
+      MockUsername.claim(currentUser.uid, selectedUsername);
+      MockProfile.save(currentUser.uid, {
+        role, email: currentUser.email,
+        username: selectedUsername,
+        usernameLC: selectedUsername.toLowerCase()
+      });
+      localStorage.setItem('maf_profile', JSON.stringify({
+        role, email: currentUser.email,
+        username: selectedUsername,
+        usernameLC: selectedUsername.toLowerCase()
+      }));
+    }
+
+    toast('Welcome to MAF, ' + selectedUsername + '! 🎉', 'correct');
+    setTimeout(() => {
+      location.href = role === 'parent' ? 'pages/parent.html' : 'index.html';
+    }, 800);
+  } catch(e) {
+    toast(e.message || 'Could not create account', 'wrong');
+    btn.disabled = false;
+    btn.textContent = 'Create account →';
+  }
+});
+
+// Enter key support
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (document.getElementById('step1').classList.contains('active')) {
+    document.getElementById('step1Btn').click();
+  }
+});
+</script>
 </body>
 </html>

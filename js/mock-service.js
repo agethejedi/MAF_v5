@@ -103,3 +103,30 @@ export const MockParentSettings = {
   get(uid) { return ls(`maf_parent_${uid}`) || defaultParentSettings(); },
   save(uid, settings) { lsSet(`maf_parent_${uid}`, settings); }
 };
+
+// ── USERNAME SYSTEM (mock) ────────────────────────────────────
+export const MockUsername = {
+  isAvailable(username) {
+    const all = ls('maf_usernames', {});
+    return !all[username.toLowerCase()];
+  },
+  claim(uid, username) {
+    const all     = ls('maf_usernames', {});
+    const usernameLC = username.toLowerCase();
+    // Check if taken by someone else
+    if (all[usernameLC] && all[usernameLC] !== uid) {
+      throw new Error('Username already taken. Please choose another.');
+    }
+    // Release old username
+    const profile = MockProfile.get(uid);
+    if (profile.usernameLC && profile.usernameLC !== usernameLC) {
+      delete all[profile.usernameLC];
+    }
+    all[usernameLC] = uid;
+    lsSet('maf_usernames', all);
+    MockProfile.save(uid, { ...profile, username, usernameLC });
+  },
+  getByUid(uid) {
+    return MockProfile.get(uid)?.username || null;
+  }
+};

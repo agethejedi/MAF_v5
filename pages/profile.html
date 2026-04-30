@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MAF — Profile</title>
   <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    .username-check { font-size:12px; margin-top:6px; min-height:18px; }
+    .check-ok  { color:var(--green); }
+    .check-err { color:var(--red); }
+    .username-suggestions { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+    .username-chip {
+      background:var(--surf2); border:1px solid var(--edge); color:var(--cream-dk);
+      padding:6px 12px; border-radius:30px; font-size:13px; cursor:pointer;
+      transition:all .15s; font-weight:600;
+    }
+    .username-chip:hover { background:var(--ora); border-color:var(--ora); color:var(--cream); }
+  </style>
 </head>
 <body>
 <nav class="topnav" id="topnav"></nav>
@@ -12,32 +24,44 @@
   <aside class="sidebar" id="sidebar"></aside>
   <main class="main-content">
     <div class="section-title">👤 Profile</div>
-    <div class="section-sub">Your account settings</div>
+    <div class="section-sub">Manage your account and username.</div>
 
     <div class="grid-2">
+      <!-- Avatar + identity -->
       <div class="card">
-        <div class="card-title">Your Avatar</div>
-        <div class="card-sub">Tap to change it in Workbook Setup</div>
-        <div style="text-align:center;padding:20px 0">
+        <div class="card-title">Your identity</div>
+        <div style="text-align:center;padding:16px 0">
           <img id="profileAvatar" src="../assets/avatars/a1.svg"
                style="width:100px;height:100px;border-radius:50%;border:3px solid var(--ora)">
+          <div style="font-family:var(--font-display);font-size:24px;color:var(--ora-lt);margin-top:10px"
+               id="profileUsernameDisplay">@—</div>
+          <div class="text-muted text-sm" id="profileEmailDisplay">—</div>
+          <div class="badge mt-8" id="profileRoleBadge">—</div>
         </div>
         <button class="btn btn-primary" style="width:100%"
                 onclick="location.href='workbook_setup.html'">Change Avatar →</button>
       </div>
 
+      <!-- Username change -->
       <div class="card">
-        <div class="card-title">Account</div>
-        <div class="label mt-8">Signed in as</div>
-        <div id="profileEmail" style="font-size:16px;color:var(--cream);margin-bottom:16px">—</div>
+        <div class="card-title">Change username</div>
+        <div class="card-sub">Your scores stay with you — only the display name changes.</div>
 
-        <div class="label">Role</div>
-        <div id="profileRole" class="badge mb-12">—</div>
+        <div class="label mt-8">Suggested usernames</div>
+        <div class="username-suggestions" id="suggestions"></div>
 
-        <div class="label mt-8">Display name</div>
+        <div class="label mt-8">Or type your own</div>
+        <input class="input" id="usernameInput" placeholder="New username"
+               maxlength="20" autocomplete="off" autocorrect="off" spellcheck="false">
+        <div class="username-check" id="usernameCheck"></div>
+
+        <div class="label mt-12">Display name (optional)</div>
         <input class="input mb-12" id="profileName" placeholder="e.g. Liam">
 
-        <button class="btn btn-primary" id="saveProfileBtn" style="width:100%">Save name</button>
+        <button class="btn btn-primary mt-8" id="saveUsernameBtn" style="width:100%" disabled>
+          Save username
+        </button>
+
         <hr class="divider">
         <button class="btn btn-ghost" id="signOutBtn" style="width:100%">🚪 Sign Out</button>
       </div>
@@ -49,43 +73,145 @@
 <script type="module">
 import { renderNav } from '../js/nav.js';
 import { isFirebaseConfigured } from '../js/firebase-config.js';
-import { MockAuth, MockProfile } from '../js/mock-service.js';
-import { signOut } from '../js/firebase-service.js';
+import { MockAuth, MockProfile, MockUsername } from '../js/mock-service.js';
+import { signOut, saveProfile, isUsernameAvailable, claimUsername } from '../js/firebase-service.js';
+import { generateUsernames, validateUsername } from '../js/username.js';
 import { toast } from '../js/utils.js';
 
 const useFirebase = isFirebaseConfigured();
-const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+const user = useFirebase
+  ? JSON.parse(localStorage.getItem('maf_user') || 'null')
+  : MockAuth.current();
 if (!user) { location.href = '../login.html'; }
 
 await renderNav({ activePage: 'profile', showSidebar: true });
 
 const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
-document.getElementById('profileEmail').textContent = user.email || user.uid;
-document.getElementById('profileRole').textContent  = profile.role || 'child';
-document.getElementById('profileName').value        = profile.name || '';
+
+// Populate current info
+document.getElementById('profileUsernameDisplay').textContent = profile.username ? `@${profile.username}` : '@—';
+document.getElementById('profileEmailDisplay').textContent    = user.email || user.uid;
+document.getElementById('profileRoleBadge').textContent       = profile.role || 'child';
+document.getElementById('profileName').value                  = profile.name || '';
 
 const avatarPath = profile.avatar
   ? profile.avatar.replace(/^(\.\.\/)*/, '../')
   : '../assets/avatars/a1.svg';
 document.getElementById('profileAvatar').src = avatarPath;
 
-document.getElementById('saveProfileBtn').addEventListener('click', () => {
-  const name = document.getElementById('profileName').value.trim();
-  const updated = { ...profile, name };
-  localStorage.setItem('maf_profile', JSON.stringify(updated));
-  if (!useFirebase) MockProfile.save(user.uid, updated);
-  toast('Name saved!', 'correct');
+// Pre-fill current username
+if (profile.username) {
+  document.getElementById('usernameInput').value = profile.username;
+}
+
+// Username suggestions
+const suggestions = generateUsernames(4);
+document.getElementById('suggestions').innerHTML = suggestions.map(u => `
+  <div class="username-chip" onclick="pickSuggestion('${u}')">${u}</div>
+`).join('');
+
+window.pickSuggestion = function(name) {
+  document.getElementById('usernameInput').value = name;
+  checkUsername(name);
+};
+
+// Real-time check
+let checkTimer;
+document.getElementById('usernameInput').addEventListener('input', e => {
+  clearTimeout(checkTimer);
+  const val = e.target.value.trim();
+  if (!val) {
+    document.getElementById('usernameCheck').textContent = '';
+    document.getElementById('saveUsernameBtn').disabled = true;
+    return;
+  }
+  checkTimer = setTimeout(() => checkUsername(val), 500);
 });
 
-document.getElementById('signOutBtn').addEventListener('click', async () => {
-  if (useFirebase) {
-    await signOut().catch(() => {});
-  } else {
-    MockAuth.signOut();
+async function checkUsername(username) {
+  const checkEl = document.getElementById('usernameCheck');
+  const btn     = document.getElementById('saveUsernameBtn');
+
+  // Same as current — always allowed
+  if (username === profile.username) {
+    checkEl.textContent = '✓ This is your current username.';
+    checkEl.className = 'username-check check-ok';
+    btn.disabled = false;
+    return;
   }
+
+  const validation = validateUsername(username);
+  if (!validation.ok) {
+    checkEl.textContent = '✗ ' + validation.reason;
+    checkEl.className = 'username-check check-err';
+    btn.disabled = true;
+    return;
+  }
+
+  checkEl.textContent = 'Checking availability...';
+  checkEl.className = 'username-check';
+
+  try {
+    const available = useFirebase
+      ? await isUsernameAvailable(username)
+      : MockUsername.isAvailable(username);
+
+    if (available) {
+      checkEl.textContent = '✓ ' + username + ' is available!';
+      checkEl.className = 'username-check check-ok';
+      btn.disabled = false;
+    } else {
+      checkEl.textContent = '✗ Already taken. Try another.';
+      checkEl.className = 'username-check check-err';
+      btn.disabled = true;
+    }
+  } catch {
+    checkEl.textContent = 'Could not check availability.';
+    btn.disabled = true;
+  }
+}
+
+// Save username
+document.getElementById('saveUsernameBtn').addEventListener('click', async () => {
+  const username = document.getElementById('usernameInput').value.trim();
+  const name     = document.getElementById('profileName').value.trim();
+  if (!username) { toast('Enter a username', 'wrong'); return; }
+
+  const btn = document.getElementById('saveUsernameBtn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  try {
+    if (useFirebase) {
+      await claimUsername(user.uid, username);
+      await saveProfile(user.uid, { name, username, usernameLC: username.toLowerCase() });
+    } else {
+      MockUsername.claim(user.uid, username);
+      MockProfile.save(user.uid, { ...profile, name, username, usernameLC: username.toLowerCase() });
+    }
+    const updated = { ...profile, name, username, usernameLC: username.toLowerCase() };
+    localStorage.setItem('maf_profile', JSON.stringify(updated));
+    document.getElementById('profileUsernameDisplay').textContent = `@${username}`;
+    toast('Profile saved! 🎉', 'correct');
+  } catch(e) {
+    toast(e.message || 'Could not save', 'wrong');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save username';
+  }
+});
+
+// Sign out
+document.getElementById('signOutBtn').addEventListener('click', async () => {
+  if (useFirebase) await signOut().catch(() => {});
+  else MockAuth.signOut();
   localStorage.removeItem('maf_user');
   location.href = '../login.html';
 });
+
+// Trigger check on load if username already set
+if (profile.username) {
+  checkUsername(profile.username);
+  document.getElementById('saveUsernameBtn').disabled = false;
+}
 </script>
 </body>
 </html>

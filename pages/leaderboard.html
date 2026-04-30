@@ -12,7 +12,7 @@
   <aside class="sidebar" id="sidebar"></aside>
   <main class="main-content">
     <div class="section-title">🏆 Leaderboard</div>
-    <div class="section-sub">Top performers ranked by weighted points earned.</div>
+    <div class="section-sub">Top performers ranked by weighted points. Usernames only — no emails.</div>
 
     <div class="card" id="lbCard">
       <div class="text-muted text-sm">Loading...</div>
@@ -20,7 +20,7 @@
 
     <div class="card mt-12">
       <div class="card-title">Your stats</div>
-      <div class="grid-3 mt-8" id="myStats">
+      <div class="grid-3 mt-8">
         <div class="stat-card"><div class="stat-num" id="myRank">—</div><div class="stat-lbl">Your rank</div></div>
         <div class="stat-card"><div class="stat-num" id="myPts">—</div><div class="stat-lbl">Total points</div></div>
         <div class="stat-card"><div class="stat-num" id="myAcc">—</div><div class="stat-lbl">Best accuracy</div></div>
@@ -33,32 +33,64 @@
 <script type="module">
 import { renderNav } from '../js/nav.js';
 import { isFirebaseConfigured } from '../js/firebase-config.js';
-import { getLeaderboard, getSessions } from '../js/firebase-service.js';
+import { getLeaderboard, getSessions, getUsernameByUid } from '../js/firebase-service.js';
 import { MockAuth, MockLeaderboard, MockSessions } from '../js/mock-service.js';
 
 const useFirebase = isFirebaseConfigured();
-const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+const user = useFirebase
+  ? JSON.parse(localStorage.getItem('maf_user') || 'null')
+  : MockAuth.current();
 if (!user) { location.href = '../login.html'; }
 
 await renderNav({ activePage: 'leaderboard', showSidebar: true });
 
+const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+const myUsername = profile.username || null;
+
+// Load leaderboard
 const lb = useFirebase
   ? await getLeaderboard(20).catch(() => [])
   : MockLeaderboard.get();
 
 const lbCard = document.getElementById('lbCard');
+
 if (!lb.length) {
   lbCard.innerHTML = '<div class="text-muted text-sm">No scores yet — complete a workbook session to appear here!</div>';
 } else {
-  const medals = ['🥇','🥈','🥉'];
-  lbCard.innerHTML = lb.map((row, i) => `
-    <div class="lb-row ${row.uid === user.uid ? 'card' : ''}" style="${row.uid === user.uid ? 'background:rgba(201,86,30,.1);border-color:var(--ora)' : ''}">
-      <div class="lb-rank ${i < 3 ? 'top' : ''}">${medals[i] || (i+1)}</div>
-      <div class="lb-name">${row.email || row.uid} ${row.uid === user.uid ? '<span class="badge badge-ora">You</span>' : ''}</div>
-      <div class="lb-score">${row.weightedPoints || 0} pts</div>
-      <div class="badge">${row.accuracy || 0}%</div>
-    </div>
-  `).join('');
+  // Fetch usernames for all uids
+  const uidSet = [...new Set(lb.map(r => r.uid).filter(Boolean))];
+  const usernameMap = {};
+
+  if (useFirebase) {
+    await Promise.all(uidSet.map(async uid => {
+      const name = await getUsernameByUid(uid).catch(() => null);
+      usernameMap[uid] = name || 'Anonymous';
+    }));
+  } else {
+    // Mock mode — use profile usernames
+    uidSet.forEach(uid => {
+      const p = JSON.parse(localStorage.getItem(`maf_profile_${uid}`) || '{}');
+      usernameMap[uid] = p.username || 'Anonymous';
+    });
+  }
+
+  const medals = ['🥇', '🥈', '🥉'];
+  const isMe = row => row.uid === user.uid;
+
+  lbCard.innerHTML = lb.map((row, i) => {
+    const displayName = usernameMap[row.uid] || 'Anonymous';
+    const me = isMe(row);
+    return `
+      <div class="lb-row" style="${me ? 'background:rgba(201,86,30,.1);border-radius:10px;border:1px solid var(--ora);margin-bottom:4px' : ''}">
+        <div class="lb-rank ${i < 3 ? 'top' : ''}">${medals[i] || (i + 1)}</div>
+        <div class="lb-name">
+          @${displayName}
+          ${me ? '<span class="badge badge-ora" style="margin-left:6px">You</span>' : ''}
+        </div>
+        <div class="lb-score">${row.weightedPoints || 0} pts</div>
+        <div class="badge">${row.accuracy || 0}%</div>
+      </div>`;
+  }).join('');
 }
 
 // My stats
@@ -68,9 +100,16 @@ const sessions = useFirebase
   : MockSessions.get(user.uid, 50);
 const totalPts = sessions.reduce((s, x) => s + (x.weightedPoints || 0), 0);
 const bestAcc  = sessions.length ? Math.max(...sessions.map(s => s.accuracy || 0)) : 0;
+
 document.getElementById('myRank').textContent = rank ? `#${rank}` : '—';
-document.getElementById('myPts').textContent  = totalPts;
+document.getElementById('myPts').textContent  = totalPts || '—';
 document.getElementById('myAcc').textContent  = bestAcc ? bestAcc + '%' : '—';
+
+// Show username in rank card
+if (myUsername) {
+  document.querySelector('.section-sub').textContent =
+    `Top performers ranked by weighted points. Playing as @${myUsername}`;
+}
 </script>
 </body>
 </html>
