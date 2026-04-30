@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Profile</title>
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="section-title">👤 Profile</div>
+    <div class="section-sub">Your account settings</div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Your Avatar</div>
+        <div class="card-sub">Tap to change it in Workbook Setup</div>
+        <div style="text-align:center;padding:20px 0">
+          <img id="profileAvatar" src="../assets/avatars/a1.svg"
+               style="width:100px;height:100px;border-radius:50%;border:3px solid var(--ora)">
+        </div>
+        <button class="btn btn-primary" style="width:100%"
+                onclick="location.href='workbook_setup.html'">Change Avatar →</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Account</div>
+        <div class="label mt-8">Signed in as</div>
+        <div id="profileEmail" style="font-size:16px;color:var(--cream);margin-bottom:16px">—</div>
+
+        <div class="label">Role</div>
+        <div id="profileRole" class="badge mb-12">—</div>
+
+        <div class="label mt-8">Display name</div>
+        <input class="input mb-12" id="profileName" placeholder="e.g. Liam">
+
+        <button class="btn btn-primary" id="saveProfileBtn" style="width:100%">Save name</button>
+        <hr class="divider">
+        <button class="btn btn-ghost" id="signOutBtn" style="width:100%">🚪 Sign Out</button>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav } from '../js/nav.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { MockAuth, MockProfile } from '../js/mock-service.js';
+import { signOut } from '../js/firebase-service.js';
+import { toast } from '../js/utils.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'profile', showSidebar: true });
+
+const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+document.getElementById('profileEmail').textContent = user.email || user.uid;
+document.getElementById('profileRole').textContent  = profile.role || 'child';
+document.getElementById('profileName').value        = profile.name || '';
+
+const avatarPath = profile.avatar
+  ? profile.avatar.replace(/^(\.\.\/)*/, '../')
+  : '../assets/avatars/a1.svg';
+document.getElementById('profileAvatar').src = avatarPath;
+
+document.getElementById('saveProfileBtn').addEventListener('click', () => {
+  const name = document.getElementById('profileName').value.trim();
+  const updated = { ...profile, name };
+  localStorage.setItem('maf_profile', JSON.stringify(updated));
+  if (!useFirebase) MockProfile.save(user.uid, updated);
+  toast('Name saved!', 'correct');
+});
+
+document.getElementById('signOutBtn').addEventListener('click', async () => {
+  if (useFirebase) {
+    await signOut().catch(() => {});
+  } else {
+    MockAuth.signOut();
+  }
+  localStorage.removeItem('maf_user');
+  location.href = '../login.html';
+});
+</script>
+</body>
+</html>

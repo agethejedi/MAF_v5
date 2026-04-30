@@ -1,0 +1,12 @@
+{
+  "name": "maf-v5",
+  "version": "5.0.0",
+  "description": "MAF — Math + Fun, a math practice app with AI tutoring and Robux rewards",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

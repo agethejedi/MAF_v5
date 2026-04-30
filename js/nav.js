@@ -6,27 +6,40 @@ import { getRobuxProgress, getParentSettings } from './firebase-service.js';
 
 const useFirebase = isFirebaseConfigured();
 
+// Detect if we're in /pages/ subdirectory and set base path accordingly
+const _inPages = window.location.pathname.includes('/pages/');
+const BASE = _inPages ? '../' : '';          // prefix for root-level files
+const PAGES = _inPages ? '' : 'pages/';     // prefix for /pages/ files
+
 export function currentUser() {
   return useFirebase
     ? JSON.parse(localStorage.getItem('maf_user') || 'null')
     : MockAuth.current();
 }
 
-export function requireAuth(redirectTo = 'login.html') {
+export function requireAuth() {
   const u = currentUser();
-  if (!u) { location.href = redirectTo; return null; }
+  if (!u) { location.href = `${BASE}login.html`; return null; }
   return u;
 }
 
 export async function renderNav({ activePage = '', showSidebar = true } = {}) {
   const user = currentUser();
 
-  // Inject nav HTML
   const navEl = document.getElementById('topnav');
   if (!navEl) return;
 
   const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
-  const avatarSrc = profile.avatar || 'assets/avatars/a1.svg';
+  const avatarSrc = profile.avatar
+    ? (avatarSrc => _inPages ? avatarSrc : avatarSrc)(profile.avatar)
+    : `${BASE}assets/avatars/a1.svg`;
+
+  // Normalize avatar path for current depth
+  const displayAvatar = profile.avatar
+    ? (_inPages
+        ? profile.avatar.replace(/^(\.\.\/)*/, '../')
+        : profile.avatar.replace(/^(\.\.\/)*/, ''))
+    : `${BASE}assets/avatars/a1.svg`;
 
   navEl.innerHTML = `
     <div class="nav-brand">
@@ -48,16 +61,17 @@ export async function renderNav({ activePage = '', showSidebar = true } = {}) {
     <div class="nav-right">
       ${user ? `<span class="badge">${user.email?.split('@')[0] || 'Player'}</span>` : ''}
       <div class="nav-avatar" id="navAvatar" title="Profile">
-        <img src="${avatarSrc}" alt="avatar" onerror="this.src='assets/avatars/a1.svg'">
+        <img src="${displayAvatar}" alt="avatar"
+             onerror="this.src='${BASE}assets/avatars/a1.svg'">
       </div>
     </div>
   `;
 
   document.getElementById('robuxMeter')?.addEventListener('click', () => {
-    location.href = 'pages/redeem.html';
+    location.href = `${PAGES}redeem.html`;
   });
   document.getElementById('navAvatar')?.addEventListener('click', () => {
-    location.href = 'pages/profile.html';
+    location.href = `${PAGES}profile.html`;
   });
 
   // Render sidebar
@@ -66,21 +80,21 @@ export async function renderNav({ activePage = '', showSidebar = true } = {}) {
     if (sideEl) {
       const isParent = profile.role === 'parent';
       const childLinks = `
-        <a class="nav-item ${activePage==='home'?'active':''}" href="index.html"><span class="icon">🏠</span>Home</a>
-        <a class="nav-item ${activePage==='workbook'?'active':''}" href="pages/workbook_setup.html"><span class="icon">📝</span>Workbook</a>
-        <a class="nav-item ${activePage==='tutor'?'active':''}" href="pages/tutor.html"><span class="icon">🤖</span>AI Tutor</a>
-        <a class="nav-item ${activePage==='tutorials'?'active':''}" href="pages/tutorials.html"><span class="icon">📚</span>Tutorials</a>
-        <a class="nav-item ${activePage==='leaderboard'?'active':''}" href="pages/leaderboard.html"><span class="icon">🏆</span>Leaderboard</a>
-        <a class="nav-item ${activePage==='redeem'?'active':''}" href="pages/redeem.html"><span class="icon">🎁</span>Robux</a>
+        <a class="nav-item ${activePage==='home'?'active':''}"        href="${BASE}index.html"><span class="icon">🏠</span>Home</a>
+        <a class="nav-item ${activePage==='workbook'?'active':''}"    href="${PAGES}workbook_setup.html"><span class="icon">📝</span>Workbook</a>
+        <a class="nav-item ${activePage==='tutor'?'active':''}"       href="${PAGES}tutor.html"><span class="icon">🤖</span>AI Tutor</a>
+        <a class="nav-item ${activePage==='tutorials'?'active':''}"   href="${PAGES}tutorials.html"><span class="icon">📚</span>Tutorials</a>
+        <a class="nav-item ${activePage==='leaderboard'?'active':''}" href="${PAGES}leaderboard.html"><span class="icon">🏆</span>Leaderboard</a>
+        <a class="nav-item ${activePage==='redeem'?'active':''}"      href="${PAGES}redeem.html"><span class="icon">🎁</span>Robux</a>
       `;
       const parentLinks = `
-        <a class="nav-item ${activePage==='parent'?'active':''}" href="pages/parent.html"><span class="icon">👨‍👦</span>Dashboard</a>
-        <a class="nav-item ${activePage==='settings'?'active':''}" href="pages/parent_settings.html"><span class="icon">⚙️</span>Settings</a>
+        <a class="nav-item ${activePage==='parent'?'active':''}"   href="${PAGES}parent.html"><span class="icon">👨‍👦</span>Dashboard</a>
+        <a class="nav-item ${activePage==='settings'?'active':''}" href="${PAGES}parent_settings.html"><span class="icon">⚙️</span>Settings</a>
       `;
       sideEl.innerHTML = `
         ${isParent ? parentLinks : childLinks}
         <div class="sidebar-spacer"></div>
-        <a class="nav-item" href="pages/profile.html"><span class="icon">👤</span>Profile</a>
+        <a class="nav-item" href="${PAGES}profile.html"><span class="icon">👤</span>Profile</a>
         <a class="nav-item" id="sideLogout" href="#"><span class="icon">🚪</span>Sign Out</a>
         <div class="sidebar-robux" id="sideRobux" style="${isParent?'display:none':''}">
           <div class="sr-label">Robux progress</div>
@@ -91,9 +105,14 @@ export async function renderNav({ activePage = '', showSidebar = true } = {}) {
       `;
       document.getElementById('sideLogout')?.addEventListener('click', (e) => {
         e.preventDefault();
-        useFirebase
-          ? import('./firebase-service.js').then(m => m.signOut()).then(() => location.href = '../login.html')
-          : (MockAuth.signOut(), location.href = '../login.html');
+        if (useFirebase) {
+          import('./firebase-service.js').then(m => m.signOut()).then(() => {
+            location.href = `${BASE}login.html`;
+          });
+        } else {
+          MockAuth.signOut();
+          location.href = `${BASE}login.html`;
+        }
       });
     }
   }
