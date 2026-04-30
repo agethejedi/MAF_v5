@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // build.js — Cloudflare Pages build script
-// Injects Firebase secrets from Cloudflare environment variables
-// into firebase-config.js at build time.
+// Injects Firebase secrets directly into firebase-config.js in place.
+// Build output directory in Cloudflare Pages should be set to: .
+// (a single dot, meaning serve the repo root)
 
-import { readFileSync, writeFileSync, mkdirSync, cpSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -26,30 +27,9 @@ if (missing.length) {
   process.exit(1);
 }
 
-// On Cloudflare Pages the repo lives at /opt/buildhome/repo.
-// cpSync cannot copy a folder into its own subdirectory, so we
-// write output to a sibling path outside the repo root.
-const isCloudflare = !!process.env.CF_PAGES;
-const outDir = isCloudflare
-  ? '/opt/buildhome/output'
-  : join(__dirname, '_cf_build');
-
-console.log(`📁 Output directory: ${outDir}`);
-mkdirSync(outDir, { recursive: true });
-
-// Copy all project files into output dir
-cpSync(__dirname, outDir, {
-  recursive: true,
-  filter: (src) => {
-    const exclude = ['_cf_build', 'node_modules', '.git', '.env', '/output'];
-    return !exclude.some(x => src.includes(x));
-  }
-});
-
-// Read template config (contains __PLACEHOLDER__ values)
-const configTemplate = readFileSync(
-  join(__dirname, 'js', 'firebase-config.js'), 'utf8'
-);
+// Read the template config (contains __PLACEHOLDER__ values)
+const configPath = join(__dirname, 'js', 'firebase-config.js');
+const configTemplate = readFileSync(configPath, 'utf8');
 
 // Inject real secret values
 const injected = configTemplate
@@ -60,9 +40,8 @@ const injected = configTemplate
   .replace('__FIREBASE_MESSAGING_SENDER_ID__', process.env.FIREBASE_MESSAGING_SENDER_ID)
   .replace('__FIREBASE_APP_ID__',              process.env.FIREBASE_APP_ID);
 
-// Write injected config into output
-mkdirSync(join(outDir, 'js'), { recursive: true });
-writeFileSync(join(outDir, 'js', 'firebase-config.js'), injected, 'utf8');
+// Write injected config back in place
+writeFileSync(configPath, injected, 'utf8');
 
-console.log('✅ Firebase credentials injected');
-console.log(`🚀 Build complete — serving from ${outDir}`);
+console.log('✅ Firebase credentials injected into js/firebase-config.js');
+console.log('🚀 Build complete — Cloudflare will serve from repo root');
