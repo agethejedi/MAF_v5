@@ -180,25 +180,23 @@ Their weakest area is: ${weakestType}.
 When explaining concepts: use simple language, give one example, then ask the child to try a practice problem.
 Keep responses concise — 2-4 sentences max unless doing a step-by-step walkthrough.`;
 
+  // All AI calls go through the Cloudflare Worker — API key never touches the browser
+  const WORKER_URL = 'https://mafv5.agedotcom.workers.dev/chat';
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 400,
-        system: systemPrompt,
-        messages: chatHistory
-      })
+      body: JSON.stringify({ system: systemPrompt, messages: chatHistory })
     });
     const data = await response.json();
+    if (data.error) throw new Error(data.error);
     const reply = data.content?.[0]?.text || 'Hmm, I had trouble thinking of a response. Try again!';
     removeTyping();
     addBubble(reply);
     chatHistory.push({ role: 'assistant', content: reply });
   } catch (e) {
     removeTyping();
-    addBubble("I'm having trouble connecting right now. Make sure the Cloudflare Worker is set up with your Anthropic API key!");
+    addBubble("I'm having trouble connecting. Check that the Cloudflare Worker is deployed and the ANTHROPIC_API_KEY secret is set.");
     console.error(e);
   }
 }
