@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 // build.js — Cloudflare Pages build script
-// Reads environment variables (set as Cloudflare Pages secrets) and
-// injects them into firebase-config.js at deploy time.
-// The output file is written to _cf_build/js/firebase-config.js
-// and is NEVER committed to git.
+// Injects Firebase secrets from Cloudflare environment variables
+// into firebase-config.js at build time.
 
 import { readFileSync, writeFileSync, mkdirSync, cpSync } from 'fs';
 import { join, dirname } from 'path';
@@ -23,40 +21,48 @@ const REQUIRED = [
 // Check all secrets are present
 const missing = REQUIRED.filter(k => !process.env[k]);
 if (missing.length) {
-  console.error(`\n❌ Missing Cloudflare environment variables:\n  ${missing.join('\n  ')}`);
+  console.error(`\n❌ Missing environment variables:\n  ${missing.join('\n  ')}`);
   console.error('\nAdd them in: Cloudflare Pages → Your project → Settings → Environment variables\n');
   process.exit(1);
 }
 
-// Copy entire project to _cf_build/
-const outDir = join(__dirname, '_cf_build');
-console.log('📁 Copying project to _cf_build/...');
+// On Cloudflare Pages the repo lives at /opt/buildhome/repo.
+// cpSync cannot copy a folder into its own subdirectory, so we
+// write output to a sibling path outside the repo root.
+const isCloudflare = !!process.env.CF_PAGES;
+const outDir = isCloudflare
+  ? '/opt/buildhome/output'
+  : join(__dirname, '_cf_build');
+
+console.log(`📁 Output directory: ${outDir}`);
+mkdirSync(outDir, { recursive: true });
+
+// Copy all project files into output dir
 cpSync(__dirname, outDir, {
   recursive: true,
   filter: (src) => {
-    // Exclude build artifacts and sensitive files
-    const exclude = ['_cf_build', 'node_modules', '.git', '.env'];
+    const exclude = ['_cf_build', 'node_modules', '.git', '.env', '/output'];
     return !exclude.some(x => src.includes(x));
   }
 });
 
-// Read the template config
+// Read template config (contains __PLACEHOLDER__ values)
 const configTemplate = readFileSync(
   join(__dirname, 'js', 'firebase-config.js'), 'utf8'
 );
 
-// Replace all placeholders with real values
+// Inject real secret values
 const injected = configTemplate
-  .replace('__FIREBASE_API_KEY__',            process.env.FIREBASE_API_KEY)
-  .replace('__FIREBASE_AUTH_DOMAIN__',        process.env.FIREBASE_AUTH_DOMAIN)
-  .replace('__FIREBASE_PROJECT_ID__',         process.env.FIREBASE_PROJECT_ID)
-  .replace('__FIREBASE_STORAGE_BUCKET__',     process.env.FIREBASE_STORAGE_BUCKET)
-  .replace('__FIREBASE_MESSAGING_SENDER_ID__',process.env.FIREBASE_MESSAGING_SENDER_ID)
-  .replace('__FIREBASE_APP_ID__',             process.env.FIREBASE_APP_ID);
+  .replace('__FIREBASE_API_KEY__',             process.env.FIREBASE_API_KEY)
+  .replace('__FIREBASE_AUTH_DOMAIN__',         process.env.FIREBASE_AUTH_DOMAIN)
+  .replace('__FIREBASE_PROJECT_ID__',          process.env.FIREBASE_PROJECT_ID)
+  .replace('__FIREBASE_STORAGE_BUCKET__',      process.env.FIREBASE_STORAGE_BUCKET)
+  .replace('__FIREBASE_MESSAGING_SENDER_ID__', process.env.FIREBASE_MESSAGING_SENDER_ID)
+  .replace('__FIREBASE_APP_ID__',              process.env.FIREBASE_APP_ID);
 
-// Write the injected config to the build output
-const outConfig = join(outDir, 'js', 'firebase-config.js');
-writeFileSync(outConfig, injected, 'utf8');
+// Write injected config into output
+mkdirSync(join(outDir, 'js'), { recursive: true });
+writeFileSync(join(outDir, 'js', 'firebase-config.js'), injected, 'utf8');
 
-console.log('✅ Firebase credentials injected into _cf_build/js/firebase-config.js');
-console.log('🚀 Build complete — Cloudflare will serve from _cf_build/');
+console.log('✅ Firebase credentials injected');
+console.log(`🚀 Build complete — serving from ${outDir}`);
