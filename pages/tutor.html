@@ -255,9 +255,18 @@ if (synth.onvoiceschanged !== undefined) {
 loadVoices();
 
 // ── SPEECH SYNTHESIS (speak) ──────────────────────────────────
+function stripForSpeech(text) {
+  return text
+    // Remove emoji (Unicode ranges covering most emoji)
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FEFF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\u{1F100}-\u{1F1FF}\u{1F200}-\u{1F2FF}\u{1F900}-\u{1F9FF}\u{E0000}-\u{E007F}]/gu, '')
+    // Remove markdown bold/italic/headers
+    .replace(/\*\*/g, '').replace(/\*/g, '').replace(/#{1,6}\s/g, '')
+    // Remove leftover punctuation artifacts
+    .replace(/\s+/g, ' ').trim();
+}
+
 function speak(text) {
-  // Strip markdown-style formatting for cleaner speech
-  const clean = text.replace(/\*\*/g, '').replace(/\*/g, '').replace(/#{1,6}\s/g, '');
+  const clean = stripForSpeech(text);
   synth.cancel(); // Stop any current speech
   const utt  = new SpeechSynthesisUtterance(clean);
   utt.voice  = selectedVoice;
@@ -382,8 +391,8 @@ function addBubble(text, isUser = false, isTyping = false) {
 }
 
 const SYSTEM_PROMPT = `You are a friendly, encouraging math tutor for a child named ${childName}.
-Keep ALL responses SHORT — maximum 3 sentences. Use simple words a 3rd grader understands.
-Use emoji occasionally to keep it fun 🎉
+Keep ALL responses SHORT - maximum 3 sentences. Use simple words a 3rd grader understands.
+Do NOT use emoji or special characters - your responses will be read aloud and emoji sound terrible when spoken.
 The child's recent performance: ${perfSummary}.
 Their weakest area is: ${weakestType}.
 When teaching: explain simply, give ONE example, then ask the child to try a practice problem.
