@@ -8,15 +8,65 @@
   <style>
     .tutor-layout { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
     @media(max-width:700px){ .tutor-layout { grid-template-columns:1fr; } }
-    .chat-panel { display:flex; flex-direction:column; height:500px; }
-    .chat-thread-wrap { flex:1; overflow-y:auto; padding-right:4px; }
-    .mic-row { background:var(--bg); border:1px solid var(--edge); border-radius:var(--radius-sm); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-top:10px; }
-    .mic-btn { width:36px;height:36px;border-radius:50%;background:var(--ora);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;border:none; }
+
+    /* Chat panel */
+    .chat-panel { display:flex; flex-direction:column; height:520px; }
+    .chat-thread-wrap { flex:1; overflow-y:auto; padding-right:4px; margin-bottom:10px; }
+    .chat-thread { display:flex; flex-direction:column; gap:10px; padding:4px 0; }
+
+    /* Voice button */
+    .voice-btn-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; margin-bottom:10px; }
+    .voice-btn {
+      width:72px; height:72px; border-radius:50%;
+      background:var(--ora); border:none; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      font-size:28px; transition:all .2s;
+      box-shadow: 0 4px 20px rgba(201,86,30,.4);
+    }
+    .voice-btn:hover { transform:scale(1.05); }
+    .voice-btn.listening {
+      background:var(--red);
+      animation: mic-pulse 1s ease-in-out infinite alternate;
+      box-shadow: 0 4px 30px rgba(176,48,32,.6);
+    }
+    .voice-btn.speaking {
+      background:var(--green);
+      box-shadow: 0 4px 30px rgba(90,138,60,.5);
+    }
+    @keyframes mic-pulse {
+      from { transform:scale(1); }
+      to   { transform:scale(1.12); }
+    }
+    .voice-status {
+      font-size:13px; color:var(--muted); text-align:center; min-height:20px;
+    }
+    .voice-status.listening { color:var(--red); font-weight:700; }
+    .voice-status.speaking  { color:var(--green); font-weight:700; }
+
+    /* Text input row */
+    .text-input-row { display:flex; gap:8px; }
+
+    /* Typing indicator */
     .typing-indicator { display:flex; gap:4px; padding:8px 12px; }
-    .typing-dot { width:8px;height:8px;border-radius:50%;background:var(--muted);animation:typing .8s ease-in-out infinite; }
+    .typing-dot {
+      width:8px; height:8px; border-radius:50%; background:var(--muted);
+      animation:typing .8s ease-in-out infinite;
+    }
     .typing-dot:nth-child(2){ animation-delay:.15s; }
     .typing-dot:nth-child(3){ animation-delay:.3s; }
-    @keyframes typing { 0%,100%{opacity:.3;transform:translateY(0)} 50%{opacity:1;transform:translateY(-4px)} }
+    @keyframes typing {
+      0%,100%{ opacity:.3; transform:translateY(0); }
+      50%    { opacity:1;   transform:translateY(-4px); }
+    }
+
+    /* Voice settings */
+    .voice-settings { background:var(--bg); border:1px solid var(--edge); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:10px; }
+    .voice-settings select { width:100%; margin-top:6px; }
+
+    /* Weakness bars */
+    .weakness-row { margin-bottom:8px; }
+    .weakness-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+    .weakness-name { font-size:13px; color:var(--cream-dk); }
   </style>
 </head>
 <body>
@@ -25,10 +75,11 @@
   <aside class="sidebar" id="sidebar"></aside>
   <main class="main-content">
     <div class="section-title">🤖 AI Tutor</div>
-    <div class="section-sub">Personalized lessons based on your performance. Talk or type!</div>
+    <div class="section-sub">Talk or type — I'll help you understand any math topic!</div>
 
     <div class="tutor-layout">
-      <!-- Left: analysis -->
+
+      <!-- Left: analysis + topic picker -->
       <div>
         <div class="card mb-12">
           <div class="card-title">Where to focus</div>
@@ -36,38 +87,52 @@
           <div id="analysisRows" class="mt-8">
             <div class="text-muted text-sm">Complete some workbook sessions first!</div>
           </div>
-          <button class="btn btn-primary mt-12" id="startLessonBtn">Start lesson on top weakness →</button>
+          <button class="btn btn-primary mt-12" id="startLessonBtn">
+            Start lesson on top weakness →
+          </button>
         </div>
+
         <div class="card">
-          <div class="card-title">Tutorial topics</div>
-          <div class="card-sub">Or pick what you want to learn</div>
+          <div class="card-title">Pick a topic</div>
+          <div class="card-sub">Or choose what you want to work on</div>
           <div id="topicBtns" class="mt-8" style="display:flex;flex-wrap:wrap;gap:8px"></div>
         </div>
       </div>
 
-      <!-- Right: chat -->
+      <!-- Right: voice + chat -->
       <div class="card chat-panel">
-        <div class="card-title">Tutor conversation</div>
+        <div class="card-title mb-12">Tutor conversation</div>
+
+        <!-- Voice settings -->
+        <div class="voice-settings">
+          <div class="label">Tutor voice</div>
+          <select id="voiceSelect" class="input"></select>
+        </div>
+
+        <!-- Chat thread -->
         <div class="chat-thread-wrap">
           <div class="chat-thread" id="chatThread">
             <div class="bubble">
-              Hey! I'm your AI math tutor. I can see your recent performance and I'm here to help.
-              Want me to start a lesson on your weakest area, or is there something specific you'd like to work on?
+              Hey! I'm your AI math tutor 🎓 Tap the orange button to talk, or type below.
+              What would you like to work on today?
             </div>
           </div>
         </div>
-        <div class="mic-row">
-          <button class="mic-btn" id="micBtn" title="Tap to speak">
-            <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
-              <rect x="4" y="1" width="6" height="9" rx="3" fill="#F5EDD8"/>
-              <path d="M2 8c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke="#F5EDD8" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-              <line x1="7" y1="13" x2="7" y2="15" stroke="#F5EDD8" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <input class="input" id="chatInput" placeholder="Type a question or tap the mic..." style="flex:1">
+
+        <!-- Voice button -->
+        <div class="voice-btn-wrap">
+          <button class="voice-btn" id="voiceBtn" title="Tap to speak">🎤</button>
+          <div class="voice-status" id="voiceStatus">Tap to speak</div>
+        </div>
+
+        <!-- Text input -->
+        <div class="text-input-row">
+          <input class="input" id="chatInput" placeholder="Or type a question..."
+                 style="flex:1" autocomplete="off">
           <button class="btn btn-primary btn-sm" id="sendBtn">Send</button>
         </div>
       </div>
+
     </div>
   </main>
 </div>
@@ -80,13 +145,17 @@ import { MockAuth, MockSessions } from '../js/mock-service.js';
 import { getSessions } from '../js/firebase-service.js';
 import { toast } from '../js/utils.js';
 
+const WORKER_URL = 'https://mafv5.agedotcom.workers.dev/chat';
+
 const useFirebase = isFirebaseConfigured();
-const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+const user = useFirebase
+  ? JSON.parse(localStorage.getItem('maf_user') || 'null')
+  : MockAuth.current();
 if (!user) { location.href = '../login.html'; }
 
 await renderNav({ activePage: 'tutor', showSidebar: true });
 
-// Load performance data
+// ── PERFORMANCE ANALYSIS ──────────────────────────────────────
 const sessions = useFirebase
   ? await getSessions(user.uid, 30).catch(() => [])
   : MockSessions.get(user.uid, 30);
@@ -95,116 +164,283 @@ const typeMap = {};
 sessions.forEach(s => {
   if (!s.typeStats) return;
   Object.entries(s.typeStats).forEach(([t, stats]) => {
-    if (!typeMap[t]) typeMap[t] = { correct:0, total:0 };
-    typeMap[t].correct += stats.correct||0;
-    typeMap[t].total   += stats.total||0;
+    if (!typeMap[t]) typeMap[t] = { correct: 0, total: 0 };
+    typeMap[t].correct += stats.correct || 0;
+    typeMap[t].total   += stats.total   || 0;
   });
 });
 const sorted = Object.entries(typeMap)
-  .filter(([,v]) => v.total>0)
-  .sort((a,b) => (a[1].correct/a[1].total)-(b[1].correct/b[1].total));
+  .filter(([, v]) => v.total > 0)
+  .sort((a, b) => (a[1].correct / a[1].total) - (b[1].correct / b[1].total));
 
-// Render analysis bars
 if (sorted.length) {
   document.getElementById('analysisSub').textContent = `Based on ${sessions.length} sessions`;
   document.getElementById('analysisRows').innerHTML = sorted.map(([type, s]) => {
-    const pct = Math.round((s.correct/s.total)*100);
-    const color = pct>=80?'var(--green)':pct>=60?'var(--amber)':'var(--red)';
-    return `<div class="row-between" style="padding:6px 0;border-bottom:1px solid var(--edge)">
-      <span style="font-size:13px;color:var(--cream-dk);min-width:120px">${type.replace('_',' ')}</span>
-      <div class="bar-bg" style="flex:1;height:5px;margin:0 10px"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
-      <span style="font-size:12px;color:${color};width:36px;text-align:right">${pct}%</span>
+    const pct   = Math.round((s.correct / s.total) * 100);
+    const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+    return `<div class="weakness-row">
+      <div class="weakness-top">
+        <span class="weakness-name">${type.replace('_', ' ')}</span>
+        <span class="badge" style="color:${color};border-color:${color}">${pct}%</span>
+      </div>
+      <div class="bar-bg" style="height:5px">
+        <div class="bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
     </div>`;
   }).join('');
 }
 
+const weakestType = sorted[0]?.[0]?.replace('_', ' ') || 'math';
+const profile     = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+const childName   = profile.username || profile.name || 'there';
+const perfSummary = sorted.length
+  ? sorted.map(([t, s]) => `${t}: ${Math.round(s.correct / s.total * 100)}%`).join(', ')
+  : 'no data yet';
+
 // Topic buttons
-const TOPICS = ['Addition','Subtraction','Multiplication','Division','Elapsed Time','Fractions','Decimals','Word Problems','Algebra','Geometry'];
+const TOPICS = [
+  'Addition', 'Subtraction', 'Multiplication', 'Division',
+  'Elapsed Time', 'Fractions', 'Decimals', 'Percentages',
+  'Word Problems', 'Algebra', 'Geometry'
+];
 document.getElementById('topicBtns').innerHTML = TOPICS.map(t =>
   `<button class="btn btn-sm" onclick="startLesson('${t}')">${t}</button>`
 ).join('');
-
-// Chat state
-const chatHistory = [];
-let weakestType = sorted[0]?.[0]?.replace('_',' ') || 'math';
 
 document.getElementById('startLessonBtn').addEventListener('click', () => {
   startLesson(weakestType);
 });
 
-window.startLesson = function(topic) {
-  const msg = `Let's start a lesson on ${topic}. Please give me a kid-friendly explanation and then walk me through an example problem, step by step.`;
-  sendToTutor(msg, true);
-};
+// ── VOICE SETUP ───────────────────────────────────────────────
+let voices       = [];
+let selectedVoice = null;
+let synth        = window.speechSynthesis;
+let recognition  = null;
+let isListening  = false;
+let isSpeaking   = false;
 
-function addBubble(text, isUser = false) {
+function loadVoices() {
+  voices = synth.getVoices();
+  const select = document.getElementById('voiceSelect');
+  select.innerHTML = '';
+
+  // Prefer high-quality English voices — Samantha (iOS), Google UK, Zira
+  const preferred = ['Samantha', 'Google UK English Female', 'Microsoft Zira',
+                     'Karen', 'Moira', 'Tessa', 'Victoria'];
+
+  const english = voices.filter(v => v.lang.startsWith('en'));
+  const sorted  = [
+    ...english.filter(v => preferred.some(p => v.name.includes(p))),
+    ...english.filter(v => !preferred.some(p => v.name.includes(p)))
+  ];
+
+  sorted.forEach((v, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${v.name} (${v.lang})`;
+    select.appendChild(opt);
+  });
+
+  // Default to first preferred voice found
+  selectedVoice = sorted[0] || voices[0];
+  select.addEventListener('change', e => {
+    selectedVoice = sorted[parseInt(e.target.value)];
+  });
+}
+
+// Voices load asynchronously on some browsers
+if (synth.onvoiceschanged !== undefined) {
+  synth.onvoiceschanged = loadVoices;
+}
+loadVoices();
+
+// ── SPEECH SYNTHESIS (speak) ──────────────────────────────────
+function speak(text) {
+  // Strip markdown-style formatting for cleaner speech
+  const clean = text.replace(/\*\*/g, '').replace(/\*/g, '').replace(/#{1,6}\s/g, '');
+  synth.cancel(); // Stop any current speech
+  const utt  = new SpeechSynthesisUtterance(clean);
+  utt.voice  = selectedVoice;
+  utt.rate   = 0.92;   // Slightly slower — easier for kids
+  utt.pitch  = 1.05;   // Slightly higher — friendlier tone
+  utt.volume = 1;
+
+  utt.onstart = () => {
+    isSpeaking = true;
+    setVoiceState('speaking');
+  };
+  utt.onend = () => {
+    isSpeaking = false;
+    setVoiceState('idle');
+  };
+  utt.onerror = () => {
+    isSpeaking = false;
+    setVoiceState('idle');
+  };
+  synth.speak(utt);
+}
+
+function setVoiceState(state) {
+  const btn    = document.getElementById('voiceBtn');
+  const status = document.getElementById('voiceStatus');
+  btn.className = 'voice-btn';
+  status.className = 'voice-status';
+  if (state === 'listening') {
+    btn.classList.add('listening');
+    btn.textContent = '⏹';
+    status.classList.add('listening');
+    status.textContent = '🔴 Listening... tap to stop';
+  } else if (state === 'speaking') {
+    btn.classList.add('speaking');
+    btn.textContent = '🔊';
+    status.classList.add('speaking');
+    status.textContent = '🟢 Tutor is speaking... tap to stop';
+  } else {
+    btn.textContent = '🎤';
+    status.textContent = 'Tap to speak';
+  }
+}
+
+// ── SPEECH RECOGNITION (listen) ──────────────────────────────
+document.getElementById('voiceBtn').addEventListener('click', () => {
+  // If speaking, stop
+  if (isSpeaking) {
+    synth.cancel();
+    setVoiceState('idle');
+    return;
+  }
+
+  // If listening, stop
+  if (isListening) {
+    recognition?.stop();
+    isListening = false;
+    setVoiceState('idle');
+    return;
+  }
+
+  // Check support
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    toast('Voice not supported in this browser. Try Chrome or Safari on iPad!', 'wrong');
+    return;
+  }
+
+  // Start listening
+  recognition = new SR();
+  recognition.lang        = 'en-US';
+  recognition.continuous  = false;
+  recognition.interimResults = false;
+
+  recognition.onstart = () => {
+    isListening = true;
+    setVoiceState('listening');
+  };
+
+  recognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    isListening = false;
+    setVoiceState('idle');
+    // Show what was heard
+    addBubble(transcript, true);
+    // Send to tutor
+    sendToTutor(transcript, false);
+  };
+
+  recognition.onerror = (e) => {
+    isListening = false;
+    setVoiceState('idle');
+    if (e.error !== 'aborted') {
+      toast('Could not hear you clearly. Try again!', 'wrong');
+    }
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    if (!isSpeaking) setVoiceState('idle');
+  };
+
+  recognition.start();
+});
+
+// ── CHAT ──────────────────────────────────────────────────────
+const chatHistory = [];
+
+function addBubble(text, isUser = false, isTyping = false) {
   const thread = document.getElementById('chatThread');
-  const div = document.createElement('div');
-  div.className = 'bubble' + (isUser ? ' user' : '');
-  div.textContent = text;
+  const div    = document.createElement('div');
+  if (isTyping) {
+    div.id = 'typingIndicator';
+    div.className = 'bubble';
+    div.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+  } else {
+    div.className = 'bubble' + (isUser ? ' user' : '');
+    div.textContent = text;
+  }
   thread.appendChild(div);
-  thread.scrollTop = thread.scrollHeight;
+  thread.parentElement.scrollTop = thread.parentElement.scrollHeight;
   return div;
 }
 
-function showTyping() {
-  const thread = document.getElementById('chatThread');
-  const div = document.createElement('div');
-  div.className = 'bubble';
-  div.id = 'typingIndicator';
-  div.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
-  thread.appendChild(div);
-  thread.scrollTop = thread.scrollHeight;
-}
-
-function removeTyping() {
-  document.getElementById('typingIndicator')?.remove();
-}
-
-const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
-const childName = profile.name || 'there';
-const perfSummary = sorted.length
-  ? sorted.map(([t,s]) => `${t}: ${Math.round(s.correct/s.total*100)}%`).join(', ')
-  : 'no data yet';
-
-async function sendToTutor(userMsg, isSystemMsg = false) {
-  if (!isSystemMsg) addBubble(userMsg, true);
-  chatHistory.push({ role: 'user', content: userMsg });
-  showTyping();
-
-  // Build system prompt
-  const systemPrompt = `You are a friendly, encouraging math tutor for a child named ${childName}.
-Keep explanations simple, fun, and age-appropriate. Use emoji occasionally.
+const SYSTEM_PROMPT = `You are a friendly, encouraging math tutor for a child named ${childName}.
+Keep ALL responses SHORT — maximum 3 sentences. Use simple words a 3rd grader understands.
+Use emoji occasionally to keep it fun 🎉
 The child's recent performance: ${perfSummary}.
 Their weakest area is: ${weakestType}.
-When explaining concepts: use simple language, give one example, then ask the child to try a practice problem.
-Keep responses concise — 2-4 sentences max unless doing a step-by-step walkthrough.`;
+When teaching: explain simply, give ONE example, then ask the child to try a practice problem.
+Always end with a question or a problem for the child to try.
+Never lecture. Keep it conversational and fun.`;
 
-  // All AI calls go through the Cloudflare Worker — API key never touches the browser
-  const WORKER_URL = 'https://mafv5.agedotcom.workers.dev/chat';
+async function sendToTutor(userMsg, addUserBubble = true) {
+  if (addUserBubble) addBubble(userMsg, true);
+  chatHistory.push({ role: 'user', content: userMsg });
+
+  // Show typing indicator
+  addBubble('', false, true);
+
   try {
     const response = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ system: systemPrompt, messages: chatHistory })
+      body: JSON.stringify({
+        system: SYSTEM_PROMPT,
+        messages: chatHistory,
+        max_tokens: 200  // Keep responses short and snappy
+      })
     });
-    const data = await response.json();
-    if (data.error) throw new Error(data.error);
-    const reply = data.content?.[0]?.text || 'Hmm, I had trouble thinking of a response. Try again!';
-    removeTyping();
+
+    const data  = await response.json();
+    const reply = data.content?.[0]?.text || "Hmm, I didn't catch that. Can you try again?";
+
+    // Remove typing indicator
+    document.getElementById('typingIndicator')?.remove();
+
+    // Add tutor bubble
     addBubble(reply);
     chatHistory.push({ role: 'assistant', content: reply });
-  } catch (e) {
-    removeTyping();
-    addBubble("I'm having trouble connecting. Check that the Cloudflare Worker is deployed and the ANTHROPIC_API_KEY secret is set.");
+
+    // Speak the response
+    speak(reply);
+
+  } catch(e) {
+    document.getElementById('typingIndicator')?.remove();
+    const errMsg = "I'm having trouble connecting right now. Try again in a moment!";
+    addBubble(errMsg);
+    speak(errMsg);
     console.error(e);
   }
 }
 
-// Send button
+window.startLesson = function(topic) {
+  // Stop any current speech
+  synth.cancel();
+  const msg = `Let's work on ${topic}! Can you tell me what you already know about it?`;
+  sendToTutor(`I want to learn about ${topic}`, false);
+};
+
+// Text send
 document.getElementById('sendBtn').addEventListener('click', () => {
   const input = document.getElementById('chatInput');
-  const msg = input.value.trim();
+  const msg   = input.value.trim();
   if (!msg) return;
   input.value = '';
   sendToTutor(msg);
@@ -213,36 +449,11 @@ document.getElementById('chatInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('sendBtn').click();
 });
 
-// Voice (Web Speech API)
-let recognition = null;
-const micBtn = document.getElementById('micBtn');
-micBtn.addEventListener('click', () => {
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    toast('Voice not supported in this browser. Try Chrome on iPad!', 'wrong');
-    return;
-  }
-  if (!recognition) {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SR();
-    recognition.lang = 'en-US';
-    recognition.onresult = e => {
-      const transcript = e.results[0][0].transcript;
-      document.getElementById('chatInput').value = transcript;
-      sendToTutor(transcript);
-    };
-    recognition.onerror = () => toast('Could not hear you. Try again!', 'wrong');
-    recognition.onend = () => micBtn.style.background = 'var(--ora)';
-  }
-  micBtn.style.background = 'var(--red)';
-  recognition.start();
-});
-
 // Check for tutorial query param
 const urlParams = new URLSearchParams(window.location.search);
 const tutorialId = urlParams.get('tutorial');
 if (tutorialId) {
-  const topic = tutorialId.replace(/_/g, ' ');
-  setTimeout(() => startLesson(topic), 500);
+  setTimeout(() => startLesson(tutorialId.replace(/_/g, ' ')), 600);
 }
 </script>
 </body>
