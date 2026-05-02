@@ -250,13 +250,11 @@
 
 <script type="module">
 import { renderNav } from './js/nav.js';
-import { MockAuth, MockSessions, MockLeaderboard } from './js/mock-service.js';
+import { MockAuth, MockSessions, MockLeaderboard, MockParentSettings } from './js/mock-service.js';
 import { BADGES } from './js/badges.js';
 import { shouldShowOnboarding, markOnboardingComplete } from './js/onboarding.js';
-import { saveParentSettings, defaultParentSettings } from './js/firebase-service.js';
-import { MockParentSettings } from './js/mock-service.js';
 import { isFirebaseConfigured } from './js/firebase-config.js';
-import { getSessions, getLeaderboard, getStreak, getBadges } from './js/firebase-service.js';
+import { getSessions, getLeaderboard, getStreak, getBadges, saveParentSettings, defaultParentSettings } from './js/firebase-service.js';
 
 const useFirebase = isFirebaseConfigured();
 const user = useFirebase
