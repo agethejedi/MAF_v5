@@ -241,6 +241,68 @@ if (profile.username) {
   checkUsername(profile.username);
   document.getElementById('saveUsernameBtn').disabled = false;
 }
+
+// ── PARENT ACCESS CODE ────────────────────────────────────────
+function generateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+async function loadOrCreateAccessCode() {
+  // Only show for child accounts
+  if (profile.role === 'parent' || profile.role === 'admin') return;
+
+  document.getElementById('accessCodeCard').style.display = '';
+
+  // Check if code already exists in localStorage
+  let code = profile.parentAccessCode;
+
+  if (!code && useFirebase) {
+    // Try fetching from Firestore
+    try {
+      const fp = await getProfile(user.uid);
+      code = fp?.parentAccessCode;
+    } catch {}
+  }
+
+  if (!code) {
+    // Generate a new one
+    code = generateCode();
+    const updated = { ...profile, parentAccessCode: code };
+    localStorage.setItem('maf_profile', JSON.stringify(updated));
+    if (useFirebase) {
+      await saveProfile(user.uid, { parentAccessCode: code }).catch(() => {});
+    } else {
+      MockProfile.save(user.uid, updated);
+    }
+  }
+
+  document.getElementById('accessCodeDisplay').textContent = code;
+}
+
+document.getElementById('copyCodeBtn')?.addEventListener('click', () => {
+  const code = document.getElementById('accessCodeDisplay').textContent;
+  navigator.clipboard.writeText(code)
+    .then(() => toast('Code copied!', 'correct'))
+    .catch(() => toast('Write it down: ' + code, 'wrong'));
+});
+
+document.getElementById('regenCodeBtn')?.addEventListener('click', async () => {
+  const newCode = generateCode();
+  const updated = { ...profile, parentAccessCode: newCode };
+  localStorage.setItem('maf_profile', JSON.stringify(updated));
+  if (useFirebase) {
+    await saveProfile(user.uid, { parentAccessCode: newCode }).catch(() => {});
+  } else {
+    MockProfile.save(user.uid, updated);
+  }
+  document.getElementById('accessCodeDisplay').textContent = newCode;
+  toast('New code generated!', 'correct');
+});
+
+await loadOrCreateAccessCode();
 </script>
 
   <script>
