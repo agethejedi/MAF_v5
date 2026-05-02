@@ -97,13 +97,35 @@
   </div>
 </div>
 
+<!-- Parent: Link child account -->
+<div class="card mt-12" id="linkChildCard" style="display:none">
+  <div class="card-title">🔗 Link child account</div>
+  <div class="card-sub">Enter the 6-character Parent Access Code shown on your child's Profile page.</div>
+
+  <div id="linkedChildrenWrap" class="mt-8" style="display:none">
+    <div class="label">Linked children</div>
+    <div id="linkedChildrenList" class="mt-8"></div>
+    <hr class="divider">
+  </div>
+
+  <div class="label mt-8">Parent Access Code</div>
+  <input class="input mt-8" id="linkCodeInput" placeholder="e.g. A1B2C3"
+         maxlength="6" style="text-transform:uppercase;letter-spacing:4px;
+         font-size:22px;text-align:center"
+         oninput="this.value=this.value.toUpperCase()">
+  <div id="linkCodeMsg" style="font-size:12px;min-height:18px;margin:8px 0;text-align:center"></div>
+  <button class="btn btn-primary mt-8" id="linkChildBtn" style="width:100%">
+    Link child account →
+  </button>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script type="module">
 import { renderNav } from '../js/nav.js';
 import { isFirebaseConfigured } from '../js/firebase-config.js';
-import { MockAuth, MockProfile, MockUsername } from '../js/mock-service.js';
-import { signOut, saveProfile, getProfile, isUsernameAvailable, claimUsername } from '../js/firebase-service.js';
+import { MockAuth, MockProfile, MockUsername, MockParentSettings } from '../js/mock-service.js';
+import { signOut, saveProfile, getProfile, isUsernameAvailable, claimUsername, getParentSettings, saveParentSettings } from '../js/firebase-service.js';
 import { generateUsernames, validateUsername } from '../js/username.js';
 import { toast } from '../js/utils.js';
 
@@ -303,6 +325,177 @@ document.getElementById('regenCodeBtn')?.addEventListener('click', async () => {
 });
 
 await loadOrCreateAccessCode();
+
+// ── PARENT: LINK CHILD ACCOUNT ────────────────────────────────
+async function loadParentLinkSection() {
+  if (profile.role !== 'parent') return;
+  document.getElementById('linkChildCard').style.display = '';
+
+  // Show already linked children
+  const settings = useFirebase
+    ? await getParentSettings(user.uid).catch(() => null)
+    : MockParentSettings.get(user.uid);
+  const childUids = settings?.childUids || [];
+
+  if (childUids.length) {
+    document.getElementById('linkedChildrenWrap').style.display = '';
+    const listEl = document.getElementById('linkedChildrenList');
+    const childProfiles = await Promise.all(
+      childUids.map(uid => useFirebase
+        ? getProfile(uid).catch(() => ({ uid, username: uid }))
+        : Promise.resolve(MockProfile.get(uid))
+      )
+    );
+    listEl.innerHTML = childProfiles.map(p => `
+      <div class="row-between" style="padding:8px 0;border-bottom:1px solid var(--edge)">
+        <div class="row" style="gap:8px">
+          <img src="${(p?.avatar || '../assets/avatars/a1.svg').replace(/^(\.\.\/)*/, '../')}"
+               style="width:32px;height:32px;border-radius:50%;background:var(--surf2)"
+               onerror="this.src='../assets/avatars/a1.svg'">
+          <div>
+            <div style="font-weight:700;color:var(--cream)">@${p?.username || p?.uid || 'Unknown'}</div>
+            <div class="text-muted text-sm">${p?.email || ''}</div>
+          </div>
+        </div>
+        <span class="badge badge-grn">Linked</span>
+      </div>`).join('');
+  }
+}
+
+document.getElementById('linkChildBtn')?.addEventListener('click', async () => {
+  const code   = document.getElementById('linkCodeInput').value.trim().toUpperCase();
+  const msgEl  = document.getElementById('linkCodeMsg');
+  const btn    = document.getElementById('linkChildBtn');
+
+  if (!code || code.length !== 6) {
+    msgEl.textContent = 'Enter the 6-character code from your child profile page.';
+    msgEl.style.color = 'var(--red)';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Linking...';
+  msgEl.textContent = 'Looking up account...';
+  msgEl.style.color = 'var(--muted)';
+
+  try {
+    // Find child with this access code
+    let childUid = null;
+    let childProfile = null;
+
+    if (useFirebase) {
+      const { collection, query, where, getDocs, doc, setDoc, serverTimestamp } =
+        await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+      const { initFirebase } = await import('../js/firebase-service.js');
+      await initFirebase();
+      // Query users collection for the access code
+      const snap = await getDocs(query(
+        collection(window._db || (await initFirebase())._db, 'users'),
+        where('parentAccessCode', '==', code)
+      )).catch(() => null);
+
+      // Fallback: use REST query via getProfile approach
+      // Since we may not have _db exposed, use a different approach
+      childUid = null; // Will be handled below
+    }
+
+    // Mock mode — scan localStorage for matching code
+    if (!useFirebase) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key.startsWith('maf_profile_')) continue;
+        const p = JSON.parse(localStorage.getItem(key) || '{}');
+        if (p.parentAccessCode === code) {
+          childUid = p.uid || key.replace('maf_profile_', '');
+          childProfile = p;
+          break;
+        }
+      }
+    }
+
+    if (!childUid && !useFirebase) {
+      msgEl.textContent = 'Code not found. Ask your child to check their Profile page.';
+      msgEl.style.color = 'var(--red)';
+      btn.disabled = false; btn.textContent = 'Link child account →';
+      return;
+    }
+
+    if (!useFirebase && childUid) {
+      // Link in mock mode
+      const settings = MockParentSettings.get(user.uid);
+      const childUids = settings.childUids || [];
+      if (!childUids.includes(childUid)) childUids.push(childUid);
+      settings.childUids = childUids;
+      MockParentSettings.save(user.uid, settings);
+
+      // Write parentUid to child profile
+      const cp = MockProfile.get(childUid);
+      MockProfile.save(childUid, { ...cp, parentUid: user.uid });
+
+      msgEl.textContent = `✓ Linked to @${childProfile?.username || childUid}!`;
+      msgEl.style.color = 'var(--green)';
+      document.getElementById('linkCodeInput').value = '';
+      toast('Child account linked!', 'correct');
+      await loadParentLinkSection();
+    } else if (useFirebase) {
+      // For Firebase, use the findChildByCode function
+      const result = await findAndLinkChild(code);
+      if (result.ok) {
+        msgEl.textContent = `✓ Linked to @${result.username}!`;
+        msgEl.style.color = 'var(--green)';
+        document.getElementById('linkCodeInput').value = '';
+        toast('Child account linked!', 'correct');
+        await loadParentLinkSection();
+      } else {
+        msgEl.textContent = result.error || 'Code not found.';
+        msgEl.style.color = 'var(--red)';
+      }
+    }
+  } catch(e) {
+    msgEl.textContent = 'Something went wrong. Try again.';
+    msgEl.style.color = 'var(--red)';
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Link child account →';
+  }
+});
+
+async function findAndLinkChild(code) {
+  try {
+    const { getFirestore, collection, query, where, getDocs, doc, setDoc, arrayUnion, serverTimestamp } =
+      await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    const { initFirebase, saveParentSettings, getParentSettings } =
+      await import('../js/firebase-service.js');
+    const fb = await initFirebase();
+    const db = fb.db || getFirestore();
+
+    // Find child by access code
+    const q = query(collection(db, 'users'), where('parentAccessCode', '==', code));
+    const snap = await getDocs(q);
+    if (snap.empty) return { ok: false, error: 'Code not found. Check your child profile page.' };
+
+    const childDoc  = snap.docs[0];
+    const childUid  = childDoc.id;
+    const childData = childDoc.data();
+
+    // Write parentUid to child
+    await setDoc(doc(db, 'users', childUid), {
+      parentUid: user.uid,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    // Write childUid to parent settings
+    const settings = await getParentSettings(user.uid).catch(() => ({}));
+    settings.childUids = [...new Set([...(settings.childUids || []), childUid])];
+    await saveParentSettings(user.uid, settings);
+
+    return { ok: true, username: childData.username || childUid };
+  } catch(e) {
+    console.error('Link error:', e);
+    return { ok: false, error: 'Linking failed. Try again.' };
+  }
+}
+
+await loadParentLinkSection();
 </script>
 
   <script>
