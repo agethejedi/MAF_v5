@@ -267,13 +267,19 @@ await renderNav({ activePage: 'home', showSidebar: true });
 // ── ONBOARDING ───────────────────────────────────────────────
 const showOb = await (async () => {
   try {
+    // Always check localStorage first — it's fast and set immediately on completion
+    const localProfile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+    if (localProfile?.onboardingComplete) return false;
+    // If localStorage says not complete, verify with Firestore (may be a returning user)
     if (useFirebase) {
       const p = await getProfile(user.uid).catch(() => null);
-      return !p?.onboardingComplete;
-    } else {
-      const p = JSON.parse(localStorage.getItem('maf_profile') || '{}');
-      return !p?.onboardingComplete;
+      if (p?.onboardingComplete) {
+        // Sync back to localStorage so we don't check again
+        localStorage.setItem('maf_profile', JSON.stringify({ ...localProfile, onboardingComplete: true }));
+        return false;
+      }
     }
+    return true;
   } catch { return false; }
 })();
 if (showOb) {
