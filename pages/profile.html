@@ -77,13 +77,33 @@
     </div>
   </main>
 </div>
+<!-- Parent Access Code (shown for child accounts only) -->
+<div class="card mt-12" id="accessCodeCard" style="display:none">
+  <div class="card-title">🔗 Parent Access Code</div>
+  <div class="card-sub">Share this code with your parent so they can link their account to yours and manage your rewards.</div>
+  <div style="text-align:center;padding:16px 0">
+    <div id="accessCodeDisplay"
+         style="font-family:monospace;font-size:36px;font-weight:900;
+                color:var(--ora-lt);letter-spacing:6px;background:var(--bg);
+                border:2px solid var(--ora);border-radius:var(--radius);
+                padding:16px 24px;display:inline-block">
+      ——————
+    </div>
+    <div class="text-muted text-sm mt-8">Show this to your parent — they enter it in their dashboard</div>
+  </div>
+  <div class="row" style="justify-content:center;gap:8px">
+    <button class="btn btn-primary" id="copyCodeBtn">Copy code</button>
+    <button class="btn btn-ghost btn-sm" id="regenCodeBtn">Generate new code</button>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script type="module">
 import { renderNav } from '../js/nav.js';
 import { isFirebaseConfigured } from '../js/firebase-config.js';
 import { MockAuth, MockProfile, MockUsername } from '../js/mock-service.js';
-import { signOut, saveProfile, isUsernameAvailable, claimUsername } from '../js/firebase-service.js';
+import { signOut, saveProfile, getProfile, isUsernameAvailable, claimUsername } from '../js/firebase-service.js';
 import { generateUsernames, validateUsername } from '../js/username.js';
 import { toast } from '../js/utils.js';
 
