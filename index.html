@@ -252,9 +252,8 @@
 import { renderNav } from './js/nav.js';
 import { MockAuth, MockSessions, MockLeaderboard, MockParentSettings } from './js/mock-service.js';
 import { BADGES } from './js/badges.js';
-import { shouldShowOnboarding, markOnboardingComplete } from './js/onboarding.js';
 import { isFirebaseConfigured } from './js/firebase-config.js';
-import { getSessions, getLeaderboard, getStreak, getBadges, saveParentSettings, defaultParentSettings } from './js/firebase-service.js';
+import { getSessions, getLeaderboard, getStreak, getBadges, saveParentSettings, defaultParentSettings, saveProfile, getProfile } from './js/firebase-service.js';
 
 const useFirebase = isFirebaseConfigured();
 const user = useFirebase
@@ -266,7 +265,17 @@ if (!user) { location.href = 'login.html'; }
 await renderNav({ activePage: 'home', showSidebar: true });
 
 // ── ONBOARDING ───────────────────────────────────────────────
-const showOb = await shouldShowOnboarding(user).catch(() => false);
+const showOb = await (async () => {
+  try {
+    if (useFirebase) {
+      const p = await getProfile(user.uid).catch(() => null);
+      return !p?.onboardingComplete;
+    } else {
+      const p = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+      return !p?.onboardingComplete;
+    }
+  } catch { return false; }
+})();
 if (showOb) {
   const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
   const role    = profile.role || 'child';
@@ -436,7 +445,12 @@ window.obFinishChild = async function() {
   // Save grade to setup
   const setup = JSON.parse(localStorage.getItem('maf_setup') || '{}');
   localStorage.setItem('maf_setup', JSON.stringify({ ...setup, grade: data.grade }));
-  await markOnboardingComplete(user, data);
+  // Mark onboarding complete
+  try {
+    const _p = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+    localStorage.setItem('maf_profile', JSON.stringify({ ..._p, onboardingComplete: true, ...data }));
+    if (useFirebase) { await saveProfile(user.uid, { onboardingComplete: true, ...data }).catch(() => {}); }
+  } catch {}
   document.getElementById('obOverlay').classList.remove('show');
   // Refresh greeting
   document.getElementById('greeting').textContent =
@@ -452,7 +466,12 @@ window.obFinishParent = async function() {
   } else {
     MockParentSettings.save(user.uid, settings);
   }
-  await markOnboardingComplete(user, { threshold: obThreshold });
+  // Mark onboarding complete
+  try {
+    const _p = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+    localStorage.setItem('maf_profile', JSON.stringify({ ..._p, onboardingComplete: true }));
+    if (useFirebase) { await saveProfile(user.uid, { onboardingComplete: true }).catch(() => {}); }
+  } catch {}
   document.getElementById('obOverlay').classList.remove('show');
 };
 // ── PWA INSTALL PROMPT ────────────────────────────────────────
