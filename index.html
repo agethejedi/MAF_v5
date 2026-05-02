@@ -44,6 +44,10 @@
         <div class="stat-num" id="statRank">—</div>
         <div class="stat-lbl">Leaderboard rank</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statStreak" style="color:var(--ora-lt)">—</div>
+        <div class="stat-lbl">Day streak 🔥</div>
+      </div>
     </div>
 
     <!-- Action cards -->
@@ -79,6 +83,13 @@
       </div>
     </div>
 
+    <!-- Badges -->
+    <div class="card mt-16" id="badgesCard" style="display:none">
+      <div class="card-title">Your badges</div>
+      <div class="card-sub">Keep playing to unlock more!</div>
+      <div id="badgesGrid" class="mt-8" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+    </div>
+
     <!-- Recent performance -->
     <div class="card mt-16" id="perfCard" style="display:none">
       <div class="card-title">Recent performance by type</div>
@@ -106,9 +117,11 @@
 
 <script type="module">
 import { renderNav } from './js/nav.js';
-import { MockAuth, MockSessions, MockLeaderboard } from './js/mock-service.js';
+import { MockAuth, MockSessions, MockLeaderboard, MockStreak, MockBadges } from './js/mock-service.js';
+import { BADGES } from './js/badges.js';
 import { isFirebaseConfigured } from './js/firebase-config.js';
-import { getSessions, getLeaderboard } from './js/firebase-service.js';
+import { getSessions, getLeaderboard, getStreak, getBadges } from './js/firebase-service.js';
+import { BADGES } from './js/badges.js';
 
 const useFirebase = isFirebaseConfigured();
 const user = useFirebase
@@ -172,6 +185,41 @@ try {
   const rank = lb.findIndex(r => r.uid === user.uid) + 1;
   document.getElementById('statRank').textContent = rank ? `#${rank}` : '—';
   document.getElementById('rankHint').textContent = rank ? `You're #${rank} this week` : 'See how you rank';
+} catch {}
+
+// Streak
+try {
+  const streak = useFirebase
+    ? await getStreak(user.uid)
+    : (() => {
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    const last = localStorage.getItem('maf_streak_date');
+    if (last !== today && last !== yesterday) return 0;
+    return parseInt(localStorage.getItem('maf_streak') || '0');
+  })();
+  document.getElementById('statStreak').textContent = streak || '0';
+} catch {}
+
+// Badges
+try {
+  const earnedIds = useFirebase
+    ? await getBadges(user.uid)
+    : JSON.parse(localStorage.getItem("maf_badges_" + user.uid) || "[]");
+  if (earnedIds.length) {
+    const earned = BADGES.filter(b => earnedIds.includes(b.id));
+    document.getElementById('badgesCard').style.display = '';
+    document.getElementById('badgesGrid').innerHTML = earned.map(b => `
+      <div title="${b.name}: ${b.desc}"
+           style="background:var(--surf2);border:1px solid var(--edge);border-radius:10px;
+                  padding:8px 12px;display:flex;align-items:center;gap:6px;cursor:default">
+        <span style="font-size:22px">${b.emoji}</span>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--cream)">${b.name}</div>
+          <div style="font-size:10px;color:var(--muted)">${b.desc}</div>
+        </div>
+      </div>`).join('');
+  }
 } catch {}
 </script>
 
