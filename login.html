@@ -78,7 +78,7 @@
   </div>
 
   <!-- Forgot password -->
-  <div class="card step" id="stepForgot">
+  <div class="card step" id="stepForgot" style="display:none">
     <div class="card-title">Reset your password</div>
     <div class="card-sub">Enter your email and we'll send you a reset link.</div>
     <div class="label mt-8">Email</div>
@@ -89,7 +89,7 @@
   </div>
 
   <!-- Step 2: Username picker (new users only) -->
-  <div class="card step" id="step2">
+  <div class="card step" id="step2" style="display:none">
     <div class="card-title">Pick your username</div>
     <div class="card-sub">This is how you'll appear on the leaderboard — never your email.</div>
 
@@ -205,8 +205,14 @@ document.getElementById('step1Btn').addEventListener('click', async () => {
 
 // ── STEP 2: Username picker ───────────────────────────────────
 function showStep2() {
-  document.getElementById('step1').classList.remove('active');
-  document.getElementById('step2').classList.add('active');
+  ['step1','step2','stepForgot'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('active');
+    el.style.display = 'none';
+  });
+  const s2 = document.getElementById('step2');
+  s2.classList.add('active');
+  s2.style.display = '';
 
   // Generate suggestions
   const suggestions = generateUsernames(4);
@@ -225,8 +231,16 @@ window.selectSuggestion = function(name) {
 };
 
 window.goBack = function() {
-  document.getElementById('step2').classList.remove('active');
-  document.getElementById('step1').classList.add('active');
+  // Hide all steps
+  ['step1','step2','stepForgot'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('active');
+    el.style.display = 'none';
+  });
+  // Show step1
+  const s1 = document.getElementById('step1');
+  s1.classList.add('active');
+  s1.style.display = '';
 };
 
 // Real-time username availability check
@@ -329,11 +343,21 @@ document.getElementById('step2Btn').addEventListener('click', async () => {
 // Forgot password
 document.getElementById('forgotPwdLink').addEventListener('click', (e) => {
   e.preventDefault();
-  // Pre-fill email if already typed
   const email = document.getElementById('email').value.trim();
   if (email) document.getElementById('resetEmail').value = email;
-  document.getElementById('step1').classList.remove('active');
-  document.getElementById('stepForgot').classList.add('active');
+  // Hide all steps
+  ['step1','step2','stepForgot'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('active');
+    el.style.display = 'none';
+  });
+  // Show forgot step
+  const sf = document.getElementById('stepForgot');
+  sf.classList.add('active');
+  sf.style.display = '';
+  document.getElementById('resetMsg').style.display = 'none';
+  document.getElementById('resetBtn').disabled = false;
+  document.getElementById('resetBtn').textContent = 'Send reset email';
 });
 
 document.getElementById('resetBtn').addEventListener('click', async () => {
