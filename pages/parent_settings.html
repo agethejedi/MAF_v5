@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Parent Settings</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <!-- PWA -->
+  <link rel="manifest" href="../manifest.json">
+  <meta name="theme-color" content="#C9561E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="MAF">
+  <link rel="apple-touch-icon" href="../assets/icons/icon-152.png">
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="section-title">⚙️ Parent Settings</div>
+    <div class="section-sub">Configure rewards, point weights, and AI difficulty settings.</div>
+
+    <div class="grid-2">
+      <!-- Reward settings -->
+      <div class="card">
+        <div class="card-title">Reward threshold</div>
+        <div class="card-sub">Points required before a gift card code is unlocked</div>
+        <div class="row mt-12" style="align-items:center;gap:14px">
+          <button class="btn" id="thDec" style="width:44px;height:44px;font-size:22px;padding:0">−</button>
+          <div style="font-family:var(--font-display);font-size:36px;color:var(--ora-lt);min-width:60px;text-align:center" id="thVal">100</div>
+          <button class="btn" id="thInc" style="width:44px;height:44px;font-size:22px;padding:0">+</button>
+          <span class="text-muted text-sm">points</span>
+        </div>
+        <button class="btn btn-primary mt-12" id="saveThBtn">Save threshold</button>
+      </div>
+
+      <!-- Point weights mode -->
+      <div class="card">
+        <div class="card-title">Point weight mode</div>
+        <div class="card-sub">How are points calculated for each problem?</div>
+        <div class="row mt-12" style="gap:8px">
+          <button class="btn" id="modeManual" onclick="setMode('manual')" style="flex:1">Manual</button>
+          <button class="btn" id="modeAI" onclick="setMode('ai')" style="flex:1">AI managed</button>
+        </div>
+        <div id="modeManualDesc" class="text-muted text-sm mt-8">
+          You set point values per problem type, difficulty, and grade level.
+        </div>
+        <div id="modeAIDesc" class="text-muted text-sm mt-8" style="display:none">
+          Claude automatically adjusts point values based on your child's performance trends.
+        </div>
+        <div id="aiPhilosophyWrap" style="display:none">
+          <div class="label mt-12">When performance improves:</div>
+          <div class="row mt-8" style="gap:8px">
+            <button class="btn btn-sm" id="philChallenge" onclick="setPhil('challenge')" style="flex:1">Increase difficulty</button>
+            <button class="btn btn-sm" id="philConsistent" onclick="setPhil('consistent')" style="flex:1">Keep same difficulty</button>
+          </div>
+        </div>
+        <button class="btn btn-primary mt-12" id="saveModeBtn">Save mode</button>
+      </div>
+    </div>
+
+    <!-- Manual point weights -->
+    <div class="card mt-12" id="manualWeightsCard">
+      <div class="card-title">Point values by difficulty</div>
+      <div class="card-sub">Multipliers applied to each problem's base point value</div>
+      <div class="grid-3 mt-12">
+        <div class="stat-card">
+          <div class="label">Easy multiplier</div>
+          <input class="input mt-8" id="wtEasy" type="number" min="1" max="10" value="1">
+        </div>
+        <div class="stat-card">
+          <div class="label">Medium multiplier</div>
+          <input class="input mt-8" id="wtMedium" type="number" min="1" max="10" value="2">
+        </div>
+        <div class="stat-card">
+          <div class="label">Hard multiplier</div>
+          <input class="input mt-8" id="wtHard" type="number" min="1" max="10" value="3">
+        </div>
+      </div>
+      <button class="btn btn-primary mt-12" id="saveWeightsBtn">Save point values</button>
+    </div>
+
+    <!-- Notifications -->
+    <div class="card mt-12">
+      <div class="card-title">Notifications</div>
+      <div class="card-sub">Get updates on your child's performance and reward milestones</div>
+      <div class="label mt-12">Email address</div>
+      <input class="input mb-12" id="notifyEmail" placeholder="parent@example.com" type="email">
+      <div class="label">Phone number (SMS)</div>
+      <input class="input mb-12" id="notifyPhone" placeholder="+1 555 000 0000" type="tel">
+      <button class="btn btn-primary" id="saveNotifyBtn">Save notification settings</button>
+    </div>
+
+    <!-- Payment (placeholder) -->
+    <div class="card mt-12">
+      <div class="card-title">Payment method</div>
+      <div class="card-sub">Used for subscription and Robux gift card purchases</div>
+      <div style="background:var(--bg);border:1px solid var(--edge);border-radius:var(--radius-sm);padding:14px;margin-top:12px">
+        <div class="label">Card number</div>
+        <input class="input mt-8 mb-12" placeholder="•••• •••• •••• ••••" inputmode="numeric" maxlength="19">
+        <div class="grid-2">
+          <div>
+            <div class="label">Expiry</div>
+            <input class="input mt-8" placeholder="MM / YY" maxlength="7">
+          </div>
+          <div>
+            <div class="label">CVV</div>
+            <input class="input mt-8" placeholder="•••" maxlength="4">
+          </div>
+        </div>
+        <div class="text-muted text-sm mt-8" style="text-align:center">
+          🔒 Payment processing powered by Stripe (coming soon)
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav } from '../js/nav.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { getParentSettings, saveParentSettings, defaultParentSettings } from '../js/firebase-service.js';
+import { MockAuth, MockParentSettings } from '../js/mock-service.js';
+import { toast } from '../js/utils.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase
+  ? JSON.parse(localStorage.getItem('maf_user') || 'null')
+  : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'settings', showSidebar: true });
+
+// Load settings
+let settings = useFirebase
+  ? await getParentSettings(user.uid).catch(() => null)
+  : MockParentSettings.get(user.uid);
+if (!settings) settings = defaultParentSettings();
+
+let threshold = settings.threshold || 100;
+let mode      = settings.mode || 'manual';
+let phil      = settings.aiPhilosophy || 'challenge';
+const pv      = settings.pointValues || defaultParentSettings().pointValues;
+
+// Populate fields
+document.getElementById('thVal').textContent        = threshold;
+document.getElementById('notifyEmail').value         = settings.notifyEmail || '';
+document.getElementById('notifyPhone').value         = settings.notifyPhone || '';
+document.getElementById('wtEasy').value              = pv.difficultyMultiplier?.easy   || 1;
+document.getElementById('wtMedium').value            = pv.difficultyMultiplier?.medium || 2;
+document.getElementById('wtHard').value              = pv.difficultyMultiplier?.hard   || 3;
+
+setMode(mode);
+setPhil(phil);
+
+// Threshold stepper
+document.getElementById('thDec').addEventListener('click', () => {
+  threshold = Math.max(10, threshold - 10);
+  document.getElementById('thVal').textContent = threshold;
+});
+document.getElementById('thInc').addEventListener('click', () => {
+  threshold = Math.min(500, threshold + 10);
+  document.getElementById('thVal').textContent = threshold;
+});
+document.getElementById('saveThBtn').addEventListener('click', async () => {
+  settings.threshold = threshold;
+  useFirebase ? await saveParentSettings(user.uid, settings).catch(console.error)
+              : MockParentSettings.save(user.uid, settings);
+  toast('Threshold saved!', 'correct');
+});
+
+// Mode
+window.setMode = function(m) {
+  mode = m;
+  document.getElementById('modeManual').classList.toggle('btn-primary', m === 'manual');
+  document.getElementById('modeAI').classList.toggle('btn-primary', m === 'ai');
+  document.getElementById('modeManualDesc').style.display   = m === 'manual' ? '' : 'none';
+  document.getElementById('modeAIDesc').style.display       = m === 'ai'     ? '' : 'none';
+  document.getElementById('aiPhilosophyWrap').style.display = m === 'ai'     ? '' : 'none';
+  document.getElementById('manualWeightsCard').style.display = m === 'manual' ? '' : 'none';
+};
+window.setPhil = function(p) {
+  phil = p;
+  document.getElementById('philChallenge').classList.toggle('btn-primary', p === 'challenge');
+  document.getElementById('philConsistent').classList.toggle('btn-primary', p === 'consistent');
+};
+document.getElementById('saveModeBtn').addEventListener('click', async () => {
+  settings.mode = mode;
+  settings.aiPhilosophy = phil;
+  useFirebase ? await saveParentSettings(user.uid, settings).catch(console.error)
+              : MockParentSettings.save(user.uid, settings);
+  toast('Mode saved!', 'correct');
+});
+
+// Weights
+document.getElementById('saveWeightsBtn').addEventListener('click', async () => {
+  settings.pointValues = {
+    ...pv,
+    difficultyMultiplier: {
+      easy:   parseInt(document.getElementById('wtEasy').value)   || 1,
+      medium: parseInt(document.getElementById('wtMedium').value) || 2,
+      hard:   parseInt(document.getElementById('wtHard').value)   || 3,
+    }
+  };
+  useFirebase ? await saveParentSettings(user.uid, settings).catch(console.error)
+              : MockParentSettings.save(user.uid, settings);
+  toast('Point values saved!', 'correct');
+});
+
+// Notifications
+document.getElementById('saveNotifyBtn').addEventListener('click', async () => {
+  settings.notifyEmail = document.getElementById('notifyEmail').value.trim();
+  settings.notifyPhone = document.getElementById('notifyPhone').value.trim();
+  useFirebase ? await saveParentSettings(user.uid, settings).catch(console.error)
+              : MockParentSettings.save(user.uid, settings);
+  toast('Notification settings saved!', 'correct');
+});
+</script>
+</body>
+</html>
