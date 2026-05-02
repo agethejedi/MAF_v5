@@ -117,11 +117,10 @@
 
 <script type="module">
 import { renderNav } from './js/nav.js';
-import { MockAuth, MockSessions, MockLeaderboard, MockStreak, MockBadges } from './js/mock-service.js';
+import { MockAuth, MockSessions, MockLeaderboard } from './js/mock-service.js';
 import { BADGES } from './js/badges.js';
 import { isFirebaseConfigured } from './js/firebase-config.js';
 import { getSessions, getLeaderboard, getStreak, getBadges } from './js/firebase-service.js';
-import { BADGES } from './js/badges.js';
 
 const useFirebase = isFirebaseConfigured();
 const user = useFirebase
@@ -271,7 +270,7 @@ if (isIOS && !isInStandalone && !localStorage.getItem('maf_install_dismissed')) 
 }
 </script>
   <script type="module">
-    import { registerServiceWorker, showIOSInstallPrompt } from '/js/pwa.js';
+    // PWA handled by inline service worker registration
     registerServiceWorker();
     showIOSInstallPrompt();
   </script>
