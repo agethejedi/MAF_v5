@@ -330,3 +330,168 @@ export async function getUidByUsername(username) {
     return snap.exists() ? snap.data().uid : null;
   } catch { return null; }
 }
+
+// ── ADMIN FUNCTIONS ───────────────────────────────────────────
+
+export async function isAdmin(uid) {
+  await init();
+  const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  try {
+    const snap = await getDoc(doc(_db, 'users', uid));
+    return snap.exists() && snap.data().role === 'admin';
+  } catch { return false; }
+}
+
+export async function getAllUsers(limitN = 100) {
+  await init();
+  const { collection, query, orderBy, limit, getDocs } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const snap = await getDocs(query(collection(_db, 'users'), limit(limitN)));
+  const rows = [];
+  snap.forEach(d => rows.push({ uid: d.id, ...d.data() }));
+  return rows;
+}
+
+export async function getAllCodes() {
+  await init();
+  const { collection, getDocs, orderBy, query } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const snap = await getDocs(query(collection(_db, 'robux_codes')));
+  const rows = [];
+  snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+  return rows;
+}
+
+export async function addCode(code, reward) {
+  await init();
+  const { doc, setDoc, serverTimestamp } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  return setDoc(doc(_db, 'robux_codes', code.toUpperCase()), {
+    redeemed: false,
+    reward: reward || '400 Robux Gift Card',
+    addedAt: serverTimestamp()
+  });
+}
+
+export async function deleteCode(code) {
+  await init();
+  const { doc, deleteDoc } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  return deleteDoc(doc(_db, 'robux_codes', code));
+}
+
+export async function getAdminAnalytics() {
+  await init();
+  const { collection, query, orderBy, limit, getDocs, where, Timestamp } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+
+  // Get all score documents (one per user)
+  const scoresSnap = await getDocs(collection(_db, 'scores'));
+  const allSessions = [];
+  const userSessionCounts = {};
+
+  // Fetch sessions for each user
+  await Promise.all(scoresSnap.docs.map(async (userDoc) => {
+    const uid = userDoc.id;
+    const sessSnap = await getDocs(
+      query(collection(_db, 'scores', uid, 'sessions'),
+        orderBy('at', 'desc'), limit(50))
+    );
+    userSessionCounts[uid] = sessSnap.size;
+    sessSnap.forEach(d => allSessions.push({ uid, ...d.data() }));
+  }));
+
+  // Aggregate type stats
+  const typeMap = {};
+  const gradeMap = {};
+  let totalPoints = 0;
+  let totalSessions = allSessions.length;
+  let totalAvgTime = 0;
+
+  allSessions.forEach(s => {
+    totalPoints += s.weightedPoints || 0;
+    totalAvgTime += s.avgTimeMs || 0;
+    if (s.grade) gradeMap[s.grade] = (gradeMap[s.grade] || 0) + 1;
+    if (s.typeStats) {
+      Object.entries(s.typeStats).forEach(([t, stats]) => {
+        if (!typeMap[t]) typeMap[t] = { correct: 0, total: 0 };
+        typeMap[t].correct += stats.correct || 0;
+        typeMap[t].total   += stats.total   || 0;
+      });
+    }
+  });
+
+  // DAU — sessions today
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todaySessions = allSessions.filter(s => {
+    if (!s.at) return false;
+    const d = s.at.toDate ? s.at.toDate() : new Date(s.at);
+    return d >= todayStart;
+  });
+
+  // WAU — sessions this week
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 7);
+  const weekSessions = allSessions.filter(s => {
+    if (!s.at) return false;
+    const d = s.at.toDate ? s.at.toDate() : new Date(s.at);
+    return d >= weekStart;
+  });
+
+  const typeAccuracy = Object.entries(typeMap)
+    .filter(([, v]) => v.total > 0)
+    .map(([type, v]) => ({ type, pct: Math.round((v.correct / v.total) * 100), total: v.total }))
+    .sort((a, b) => a.pct - b.pct);
+
+  return {
+    totalSessions,
+    todaySessions: todaySessions.length,
+    weekSessions: weekSessions.length,
+    avgPointsPerSession: totalSessions ? Math.round(totalPoints / totalSessions) : 0,
+    avgTimeMs: totalSessions ? Math.round(totalAvgTime / totalSessions) : 0,
+    typeAccuracy,
+    gradeMap,
+    userSessionCounts,
+    uniqueActiveUsers: Object.keys(userSessionCounts).length
+  };
+}
+
+export async function deleteUserData(uid, username) {
+  await init();
+  const {
+    doc, collection, getDocs, deleteDoc, writeBatch
+  } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+
+  const batch = writeBatch(_db);
+
+  // Delete user profile
+  batch.delete(doc(_db, 'users', uid));
+
+  // Delete username reservation
+  if (username) {
+    batch.delete(doc(_db, 'usernames', username.toLowerCase()));
+  }
+
+  // Delete parent settings
+  batch.delete(doc(_db, 'parent_settings', uid));
+
+  // Delete robux progress
+  batch.delete(doc(_db, 'robux_progress', uid));
+
+  await batch.commit();
+
+  // Delete subcollections (sessions, redemptions) — batch can't do subcollections
+  const sessSnap = await getDocs(collection(_db, 'scores', uid, 'sessions'));
+  const sessBatch = writeBatch(_db);
+  sessSnap.forEach(d => sessBatch.delete(d.ref));
+  if (!sessSnap.empty) await sessBatch.commit();
+
+  const redSnap = await getDocs(collection(_db, 'robux_progress', uid, 'redemptions'));
+  const redBatch = writeBatch(_db);
+  redSnap.forEach(d => redBatch.delete(d.ref));
+  if (!redSnap.empty) await redBatch.commit();
+
+  // Delete scores parent doc
+  await deleteDoc(doc(_db, 'scores', uid));
+}
