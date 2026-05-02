@@ -67,19 +67,7 @@
 
       <!-- Right col -->
       <div>
-        <!-- Gift codes -->
-        <div class="card mb-12">
-          <div class="card-title">Gift card codes</div>
-          <div class="card-sub">Codes are served automatically when your child hits their goal.</div>
-          <div id="codesList" class="mt-8"><div class="text-muted text-sm">Loading...</div></div>
-          <hr class="divider">
-          <div class="label">Add a new code</div>
-          <div class="row mt-8">
-            <input class="input" id="newCode" placeholder="e.g. FREE-XXXX-YYYY">
-            <input class="input" id="newReward" placeholder="e.g. 400 Robux" style="max-width:140px">
-            <button class="btn btn-primary btn-sm" id="addCodeBtn">Add</button>
-          </div>
-        </div>
+
 
         <!-- AI analysis -->
         <div class="card">
@@ -326,36 +314,7 @@ if (types.length) {
   document.getElementById('aiSub').textContent = 'Complete some workbook sessions to see analysis here.';
 }
 
-// Gift codes (mock only)
-function renderCodes() {
-  const codes = useFirebase ? [] : MockRobux.getCodes();
-  const el = document.getElementById('codesList');
-  if (!codes.length) {
-    el.innerHTML = '<div class="text-muted text-sm">No codes in inventory. Add some below.</div>';
-    return;
-  }
-  el.innerHTML = codes.map(c => `
-    <div class="code-row">
-      <span style="font-family:monospace;font-size:13px;color:${c.redeemed?'var(--muted)':'var(--ora-lt)'}">${c.code}</span>
-      <span class="badge ${c.redeemed?'':'badge-grn'}">${c.redeemed ? `Redeemed ${fmtDate(c.redeemedAt)}` : 'Available'}</span>
-    </div>`).join('');
-}
-renderCodes();
 
-document.getElementById('addCodeBtn').addEventListener('click', () => {
-  const code   = document.getElementById('newCode').value.trim().toUpperCase();
-  const reward = document.getElementById('newReward').value.trim() || '400 Robux Gift Card';
-  if (!code) { toast('Enter a code', 'wrong'); return; }
-  if (!useFirebase) {
-    MockRobux.addCode(code, reward);
-    renderCodes();
-    document.getElementById('newCode').value = '';
-    document.getElementById('newReward').value = '';
-    toast('Code added!', 'correct');
-  } else {
-    toast('Firebase code management coming soon. Use Firestore console for now.', 'wrong');
-  }
-});
 </script>
 
   <script>
