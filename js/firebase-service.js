@@ -495,3 +495,168 @@ export async function deleteUserData(uid, username) {
   // Delete scores parent doc
   await deleteDoc(doc(_db, 'scores', uid));
 }
+
+// ── STREAKS ───────────────────────────────────────────────────
+
+export async function updateStreak(uid) {
+  await init();
+  const { doc, getDoc, setDoc, serverTimestamp } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+
+  const ref  = doc(_db, 'users', uid);
+  const snap = await getDoc(ref);
+  const data = snap.exists() ? snap.data() : {};
+
+  const now       = new Date();
+  const today     = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const lastDate  = data.lastSessionDate || null;
+  let   streak    = data.streak || 0;
+
+  if (lastDate === today) {
+    // Already played today — streak unchanged
+    return streak;
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yStr = yesterday.toISOString().slice(0, 10);
+
+  if (lastDate === yStr) {
+    // Played yesterday — extend streak
+    streak++;
+  } else {
+    // Missed a day — reset streak
+    streak = 1;
+  }
+
+  await setDoc(ref, {
+    streak,
+    lastSessionDate: today,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+
+  return streak;
+}
+
+export async function getStreak(uid) {
+  await init();
+  const { doc, getDoc } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const snap = await getDoc(doc(_db, 'users', uid));
+  return snap.exists() ? (snap.data().streak || 0) : 0;
+}
+
+// ── BADGES ────────────────────────────────────────────────────
+
+export async function getBadges(uid) {
+  await init();
+  const { doc, getDoc } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const snap = await getDoc(doc(_db, 'users', uid));
+  return snap.exists() ? (snap.data().badges || []) : [];
+}
+
+export async function awardBadges(uid, newBadgeIds) {
+  if (!newBadgeIds.length) return;
+  await init();
+  const { doc, getDoc, setDoc, serverTimestamp } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const ref  = doc(_db, 'users', uid);
+  const snap = await getDoc(ref);
+  const existing = snap.exists() ? (snap.data().badges || []) : [];
+  const merged   = [...new Set([...existing, ...newBadgeIds])];
+  await setDoc(ref, {
+    badges: merged,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+export async function getRedemptionCount(uid) {
+  await init();
+  const { collection, getDocs } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const snap = await getDocs(collection(_db, 'robux_progress', uid, 'redemptions'));
+  return snap.size;
+}
+
+// ── STREAKS ───────────────────────────────────────────────────
+
+export async function updateStreak(uid) {
+  await init();
+  const { doc, getDoc, setDoc, serverTimestamp } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+
+  const ref  = doc(_db, 'users', uid);
+  const snap = await getDoc(ref);
+  const data = snap.exists() ? snap.data() : {};
+
+  const today     = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const lastDate  = data.lastSessionDate || null;
+  let   streak    = data.streak || 0;
+
+  if (lastDate === today) {
+    // Already played today — no change
+    return streak;
+  }
+
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  if (lastDate === yesterday) {
+    streak += 1; // Consecutive day
+  } else {
+    streak = 1;  // Streak broken — start fresh
+  }
+
+  await setDoc(ref, { streak, lastSessionDate: today, updatedAt: serverTimestamp() }, { merge: true });
+  return streak;
+}
+
+export async function getStreak(uid) {
+  await init();
+  const { doc, getDoc } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const snap = await getDoc(doc(_db, 'users', uid));
+  if (!snap.exists()) return 0;
+  const data = snap.data();
+  // Check if streak is still active (played today or yesterday)
+  const today     = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const last      = data.lastSessionDate;
+  if (last !== today && last !== yesterday) return 0; // Expired
+  return data.streak || 0;
+}
+
+// ── BADGES ────────────────────────────────────────────────────
+
+export async function getBadges(uid) {
+  await init();
+  const { doc, getDoc } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const snap = await getDoc(doc(_db, 'users', uid));
+  return snap.exists() ? (snap.data().badges || []) : [];
+}
+
+export async function awardBadges(uid, newBadgeIds) {
+  if (!newBadgeIds.length) return;
+  await init();
+  const { doc, setDoc, serverTimestamp, arrayUnion } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  await setDoc(doc(_db, 'users', uid), {
+    badges: arrayUnion(...newBadgeIds),
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+export async function getAggregateTypeStats(uid) {
+  // Aggregate typeStats across all sessions
+  const sessions = await getSessions(uid, 100);
+  const typeMap  = {};
+  sessions.forEach(s => {
+    if (!s.typeStats) return;
+    Object.entries(s.typeStats).forEach(([t, stats]) => {
+      if (!typeMap[t]) typeMap[t] = { correct:0, total:0 };
+      typeMap[t].correct += stats.correct || 0;
+      typeMap[t].total   += stats.total   || 0;
+    });
+  });
+  return typeMap;
+}
