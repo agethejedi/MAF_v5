@@ -144,7 +144,7 @@
 import { renderNav, updateMeter } from '../js/nav.js';
 import { makeProblem, normalizeTimeString, clockSVG, fmtMs, toast, playCorrect, playWrong } from '../js/utils.js';
 import { isFirebaseConfigured } from '../js/firebase-config.js';
-import { saveSession, addRobuxPoints, getRobuxProgress, claimCode, getParentSettings, calcPoints, updateStreak, getBadges, awardBadges, getSessions, getRedemptionHistory } from '../js/firebase-service.js';
+import { saveSession, addRobuxPoints, getRobuxProgress, claimCode, getParentSettings, calcPoints, updateStreak, getBadges, awardBadges, getSessions, getRedemptionHistory, getStreak } from '../js/firebase-service.js';
 import { MockAuth, MockSessions, MockRobux, MockParentSettings } from '../js/mock-service.js';
 import { evaluateBadges } from '../js/badges.js';
 
@@ -349,7 +349,7 @@ async function finish() {
       ? await getBadges(user.uid)
       : JSON.parse(localStorage.getItem("maf_badges_" + user.uid) || "[]");
     const redemptionCount = useFirebase
-      ? await getRedemptionCount(user.uid).catch(() => 0)
+      ? (await getRedemptionHistory(user.uid).catch(() => [])).length
       : MockRobux.getHistory(user.uid).length;
 
     const context = {
@@ -361,7 +361,17 @@ async function finish() {
       redemptionCount
     };
 
+    console.log('[Badges] Context:', JSON.stringify({
+      accuracy: context.session?.accuracy,
+      avgTimeMs: context.session?.avgTimeMs,
+      streak: context.streak,
+      totalProblems: context.totalProblems,
+      redemptionCount: context.redemptionCount
+    }));
+    console.log('[Badges] Already earned:', existingBadges);
+
     const newBadges = evaluateBadges(context, existingBadges);
+    console.log('[Badges] New badges earned:', newBadges.map(b => b.id));
 
     if (newBadges.length) {
       // Award badges in Firestore
