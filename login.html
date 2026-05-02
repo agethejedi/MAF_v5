@@ -72,6 +72,20 @@
     <p class="text-muted text-sm mt-8" style="text-align:center">
       New? We'll create your account and let you pick a username.
     </p>
+    <p class="text-muted text-sm mt-8" style="text-align:center">
+      <a href="#" id="forgotPwdLink" style="color:var(--ora-lt)">Forgot your password?</a>
+    </p>
+  </div>
+
+  <!-- Forgot password -->
+  <div class="card step" id="stepForgot">
+    <div class="card-title">Reset your password</div>
+    <div class="card-sub">Enter your email and we'll send you a reset link.</div>
+    <div class="label mt-8">Email</div>
+    <input class="input mb-12" id="resetEmail" type="email" placeholder="you@example.com" autocomplete="email">
+    <button class="btn btn-primary btn-lg" id="resetBtn" style="width:100%">Send reset email</button>
+    <div id="resetMsg" class="text-muted text-sm mt-8" style="text-align:center;display:none"></div>
+    <button class="btn btn-ghost btn-sm mt-8" style="width:100%" onclick="goBack()">← Back to sign in</button>
   </div>
 
   <!-- Step 2: Username picker (new users only) -->
@@ -312,11 +326,64 @@ document.getElementById('step2Btn').addEventListener('click', async () => {
   }
 });
 
+// Forgot password
+document.getElementById('forgotPwdLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  // Pre-fill email if already typed
+  const email = document.getElementById('email').value.trim();
+  if (email) document.getElementById('resetEmail').value = email;
+  document.getElementById('step1').classList.remove('active');
+  document.getElementById('stepForgot').classList.add('active');
+});
+
+document.getElementById('resetBtn').addEventListener('click', async () => {
+  const email = document.getElementById('resetEmail').value.trim();
+  const msgEl = document.getElementById('resetMsg');
+  const btn   = document.getElementById('resetBtn');
+
+  if (!email) { toast('Enter your email address', 'wrong'); return; }
+
+  btn.disabled = true; btn.textContent = 'Sending...';
+
+  if (useFirebase) {
+    try {
+      const { getAuth, sendPasswordResetEmail } =
+        await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+      const { initFirebase } = await import('./js/firebase-service.js');
+      await initFirebase();
+      await sendPasswordResetEmail(getAuth(), email);
+      msgEl.textContent = '✓ Reset email sent! Check your inbox (and spam folder).';
+      msgEl.style.color = 'var(--green)';
+      msgEl.style.display = '';
+      btn.textContent = 'Email sent';
+    } catch(e) {
+      const msg = e.code === 'auth/user-not-found'
+        ? 'No account found with that email.'
+        : e.code === 'auth/invalid-email'
+        ? 'Please enter a valid email address.'
+        : 'Something went wrong. Try again.';
+      toast(msg, 'wrong');
+      btn.disabled = false;
+      btn.textContent = 'Send reset email';
+    }
+  } else {
+    // Demo mode — no real email but show confirmation
+    msgEl.textContent = 'Demo mode: password reset emails require Firebase to be connected.';
+    msgEl.style.color = 'var(--amber)';
+    msgEl.style.display = '';
+    btn.disabled = false;
+    btn.textContent = 'Send reset email';
+  }
+});
+
 // Enter key support
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   if (document.getElementById('step1').classList.contains('active')) {
     document.getElementById('step1Btn').click();
+  }
+  if (document.getElementById('stepForgot').classList.contains('active')) {
+    document.getElementById('resetBtn').click();
   }
 });
 </script>
