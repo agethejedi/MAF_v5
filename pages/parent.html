@@ -97,7 +97,7 @@
 <script type="module">
 import { renderNav } from '../js/nav.js';
 import { isFirebaseConfigured } from '../js/firebase-config.js';
-import { getParentSettings, saveParentSettings, getSessions, getRobuxProgress } from '../js/firebase-service.js';
+import { getParentSettings, saveParentSettings, getSessions, getRobuxProgress, saveProfile } from '../js/firebase-service.js';
 import { MockAuth, MockParentSettings, MockSessions, MockRobux } from '../js/mock-service.js';
 import { toast, fmtDate } from '../js/utils.js';
 
@@ -106,6 +106,141 @@ const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') 
 if (!user) { location.href = '../login.html'; }
 
 await renderNav({ activePage: 'parent', showSidebar: true });
+
+// ── PARENT ONBOARDING CHECK ───────────────────────────────────
+const _localProfile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+if (!_localProfile?.onboardingComplete && _localProfile?.role === 'parent') {
+  // Inject onboarding overlay into this page
+  const _obDiv = document.createElement('div');
+  _obDiv.innerHTML = `
+    <style>
+      .ob-overlay{position:fixed;inset:0;z-index:300;background:rgba(44,26,14,.92);display:flex;align-items:center;justify-content:center;padding:20px}
+      .ob-modal{background:var(--surf);border:1px solid var(--edge);border-radius:20px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+      .ob-step{display:none}.ob-step.active{display:block}
+      .ob-emoji{font-size:56px;text-align:center;margin-bottom:12px}
+      .ob-title{font-family:var(--font-display);font-size:26px;color:var(--cream);text-align:center;margin-bottom:8px}
+      .ob-sub{font-size:14px;color:var(--muted);text-align:center;margin-bottom:24px;line-height:1.6}
+      .ob-dots{display:flex;justify-content:center;gap:8px;margin-bottom:24px}
+      .ob-dot{width:8px;height:8px;border-radius:50%;background:var(--edge);transition:background .2s}
+      .ob-dot.active{background:var(--ora)}
+      .ob-btn{width:100%;padding:14px;border-radius:var(--radius);background:var(--ora);border:none;color:var(--cream);font-family:var(--font-body);font-size:16px;font-weight:700;cursor:pointer;margin-top:8px}
+      .ob-btn-ghost{width:100%;padding:10px;border-radius:var(--radius);background:transparent;border:1px solid var(--edge);color:var(--muted);font-family:var(--font-body);font-size:14px;cursor:pointer;margin-top:8px}
+      .ob-how-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px}
+      .ob-how-card{background:var(--bg);border:1px solid var(--edge);border-radius:var(--radius);padding:14px 10px;text-align:center}
+      .ob-how-emoji{font-size:28px;margin-bottom:8px}
+      .ob-how-label{font-size:12px;color:var(--cream-dk);font-weight:700}
+      .ob-how-desc{font-size:11px;color:var(--muted);margin-top:4px}
+      .ob-threshold-val{font-family:var(--font-display);font-size:48px;color:var(--ora-lt);line-height:1;text-align:center}
+      .ob-stepper{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:12px}
+      .ob-step-btn{width:44px;height:44px;border-radius:50%;background:var(--surf2);border:1px solid var(--edge);color:var(--cream);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+      .ob-payment-note{background:rgba(201,86,30,.1);border:1px solid var(--ora);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:var(--cream-dk);line-height:1.6;margin-bottom:16px}
+      .ob-card-form{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+      .ob-card-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+      .ob-tos-box{background:var(--bg);border:1px solid var(--edge);border-radius:var(--radius-sm);padding:10px 12px;max-height:100px;overflow-y:auto;font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px}
+      .ob-check-label{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--cream-dk);margin-bottom:8px;cursor:pointer;line-height:1.5}
+      .ob-check-label input{margin-top:2px;flex-shrink:0;accent-color:var(--ora)}
+      .stripe-badge{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;color:var(--muted);margin-top:8px}
+    </style>
+    <div class="ob-overlay show" id="obOverlayParent">
+      <div class="ob-modal">
+        <div class="ob-step active" id="obp-1">
+          <div class="ob-emoji">👨‍👦</div>
+          <div class="ob-title">Welcome to MAF!</div>
+          <div class="ob-sub">Your child's AI-powered math companion. Let's get you set up in 3 quick steps.</div>
+          <div class="ob-dots"><div class="ob-dot active"></div><div class="ob-dot"></div><div class="ob-dot"></div><div class="ob-dot"></div></div>
+          <div class="ob-how-grid">
+            <div class="ob-how-card"><div class="ob-how-emoji">🤖</div><div class="ob-how-label">AI Tutoring</div><div class="ob-how-desc">Personalized lessons for your child</div></div>
+            <div class="ob-how-card"><div class="ob-how-emoji">📊</div><div class="ob-how-label">Progress tracking</div><div class="ob-how-desc">See exactly how they improve</div></div>
+            <div class="ob-how-card"><div class="ob-how-emoji">🎮</div><div class="ob-how-label">Robux rewards</div><div class="ob-how-desc">Motivate with rewards they want</div></div>
+            <div class="ob-how-card"><div class="ob-how-emoji">🏆</div><div class="ob-how-label">Leaderboard</div><div class="ob-how-desc">Friendly competition keeps them going</div></div>
+          </div>
+          <button class="ob-btn" onclick="obpNext(2)">Get started →</button>
+        </div>
+        <div class="ob-step" id="obp-2">
+          <div class="ob-title">Set the reward goal</div>
+          <div class="ob-sub">How many points should your child earn before receiving a Robux gift card code?</div>
+          <div class="ob-dots"><div class="ob-dot"></div><div class="ob-dot active"></div><div class="ob-dot"></div><div class="ob-dot"></div></div>
+          <div style="margin:16px 0 24px;text-align:center">
+            <div class="ob-threshold-val" id="obpThreshVal">100</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:4px">points to earn a reward</div>
+            <div class="ob-stepper">
+              <button class="ob-step-btn" onclick="obpAdjust(-10)">−</button>
+              <button class="ob-step-btn" onclick="obpAdjust(10)">+</button>
+            </div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--edge);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+            💡 A typical session earns 15–30 points. We recommend starting at 100 points (~4–6 sessions).
+          </div>
+          <button class="ob-btn" onclick="obpNext(3)">Continue →</button>
+        </div>
+        <div class="ob-step" id="obp-3">
+          <div class="ob-title">Subscription & payment</div>
+          <div class="ob-dots"><div class="ob-dot"></div><div class="ob-dot"></div><div class="ob-dot active"></div><div class="ob-dot"></div></div>
+          <div class="ob-payment-note">
+            <strong>MAF subscription: $[PRICE]/month</strong><br>
+            Covers full access including AI tutoring and the parent dashboard.<br><br>
+            <strong>⚠️ Robux gift card codes are not included.</strong> They are purchased on your behalf when your child earns a reward and charged separately.
+          </div>
+          <div class="ob-card-form">
+            <div><div class="label">Cardholder name</div><input class="input" placeholder="Name on card" autocomplete="cc-name"></div>
+            <div><div class="label">Card number</div><input class="input" placeholder="•••• •••• •••• ••••" maxlength="19" inputmode="numeric"></div>
+            <div class="ob-card-row">
+              <div><div class="label">Expiry</div><input class="input" placeholder="MM / YY" maxlength="7"></div>
+              <div><div class="label">CVV</div><input class="input" placeholder="•••" maxlength="4"></div>
+            </div>
+          </div>
+          <div class="stripe-badge">🔒 Powered by Stripe (coming soon)</div>
+          <hr class="divider">
+          <div class="ob-tos-box">MAF is a paid subscription. Robux gift card codes are purchased at cost and charged separately. You may cancel anytime. <a href="terms.html" target="_blank" style="color:var(--ora-lt)">Full Terms →</a></div>
+          <label class="ob-check-label"><input type="checkbox" id="obpTos"> I agree to the Terms of Service and Privacy Policy</label>
+          <label class="ob-check-label"><input type="checkbox" id="obpRobux"> I understand Robux codes are charged separately</label>
+          <button class="ob-btn" onclick="obpNext(4)">Continue →</button>
+          <button class="ob-btn-ghost" onclick="obpNext(4)">Set up payment later</button>
+        </div>
+        <div class="ob-step" id="obp-4">
+          <div class="ob-emoji">🔗</div>
+          <div class="ob-title">Link your child's account</div>
+          <div class="ob-sub">Enter the Parent Access Code from your child's Profile page.</div>
+          <div class="ob-dots"><div class="ob-dot"></div><div class="ob-dot"></div><div class="ob-dot"></div><div class="ob-dot active"></div></div>
+          <div class="label mt-8">Parent Access Code</div>
+          <input class="input" id="obpCode" placeholder="e.g. A1B2C3" maxlength="6"
+                 style="text-transform:uppercase;letter-spacing:4px;font-size:22px;text-align:center;margin-bottom:8px"
+                 oninput="this.value=this.value.toUpperCase()">
+          <div id="obpCodeMsg" style="font-size:12px;min-height:18px;margin-bottom:12px;text-align:center;color:var(--amber)"></div>
+          <button class="ob-btn" onclick="obpFinish()">Link account →</button>
+          <button class="ob-btn-ghost" onclick="obpFinish()">Skip for now</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(_obDiv);
+
+  let _obpThresh = 100;
+  window.obpNext = function(step) {
+    document.querySelectorAll('[id^="obp-"]').forEach(s => s.classList.remove('active'));
+    document.getElementById('obp-' + step)?.classList.add('active');
+  };
+  window.obpAdjust = function(d) {
+    _obpThresh = Math.max(10, Math.min(500, _obpThresh + d));
+    document.getElementById('obpThreshVal').textContent = _obpThresh;
+  };
+  window.obpFinish = async function() {
+    // Save threshold
+    try {
+      const s = useFirebase
+        ? (await getParentSettings(user.uid).catch(() => null)) || {}
+        : MockParentSettings.get(user.uid);
+      s.threshold = _obpThresh;
+      useFirebase ? await saveParentSettings(user.uid, s).catch(() => {}) : MockParentSettings.save(user.uid, s);
+    } catch {}
+    // Mark complete
+    const _p = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+    localStorage.setItem('maf_profile', JSON.stringify({ ..._p, onboardingComplete: true }));
+    if (useFirebase) { await saveProfile(user.uid, { onboardingComplete: true }).catch(() => {}); }
+    document.getElementById('obOverlayParent').remove();
+    // Refresh page data
+    location.reload();
+  };
+}
 
 let settings = useFirebase
   ? await getParentSettings(user.uid).catch(() => null)
