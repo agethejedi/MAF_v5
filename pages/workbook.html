@@ -120,6 +120,15 @@
   </main>
 </div>
 
+<!-- Badge unlock overlay -->
+<div class="celebrate-overlay" id="badgeOverlay">
+  <div class="celebrate-emoji" id="badgeEmoji">🎯</div>
+  <div class="celebrate-title">Badge unlocked!</div>
+  <div class="celebrate-sub" id="badgeName">Sharp Shooter</div>
+  <div class="celebrate-sub" style="font-size:14px" id="badgeDesc"></div>
+  <button class="btn btn-primary btn-lg" onclick="closeBadge()">Awesome! 🎉</button>
+</div>
+
 <!-- Celebration overlay -->
 <div class="celebrate-overlay" id="celebrateOverlay">
   <div class="celebrate-emoji">🎮</div>
@@ -135,8 +144,9 @@
 import { renderNav, updateMeter } from '../js/nav.js';
 import { makeProblem, normalizeTimeString, clockSVG, fmtMs, toast, playCorrect, playWrong } from '../js/utils.js';
 import { isFirebaseConfigured } from '../js/firebase-config.js';
-import { saveSession, addRobuxPoints, getRobuxProgress, claimCode, getParentSettings, calcPoints } from '../js/firebase-service.js';
+import { saveSession, addRobuxPoints, getRobuxProgress, claimCode, getParentSettings, calcPoints, updateStreak, getBadges, awardBadges, getSessions, getRedemptionHistory } from '../js/firebase-service.js';
 import { MockAuth, MockSessions, MockRobux, MockParentSettings } from '../js/mock-service.js';
+import { evaluateBadges } from '../js/badges.js';
 
 const useFirebase = isFirebaseConfigured();
 const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
@@ -302,6 +312,79 @@ async function finish() {
 
   await updateMeter(user);
 
+  // ── STREAK + BADGE CHECK ──────────────────────────────────
+  try {
+    // Update streak
+    const newStreak = useFirebase
+      ? await updateStreak(user.uid)
+      : (() => {
+      const today = new Date().toISOString().split('T')[0];
+      const last  = localStorage.getItem('maf_streak_date');
+      const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+      let streak = parseInt(localStorage.getItem('maf_streak') || '0');
+      if (last === today) { /* no change */ }
+      else if (last === yesterday) { streak++; }
+      else { streak = 1; }
+      localStorage.setItem('maf_streak', streak);
+      localStorage.setItem('maf_streak_date', today);
+      return streak;
+    })();
+
+    // Build context for badge checking
+    const allSessions = useFirebase
+      ? await getSessions(user.uid, 50).catch(() => [])
+      : MockSessions.get(user.uid, 50);
+
+    const totalProblems  = allSessions.reduce((s, x) => s + (x.total || 0), 0);
+    const aggTypeStats = {};
+    allSessions.forEach(s => {
+      if (!s.typeStats) return;
+      Object.entries(s.typeStats).forEach(([t, st]) => {
+        if (!aggTypeStats[t]) aggTypeStats[t] = { correct:0, total:0 };
+        aggTypeStats[t].correct += st.correct || 0;
+        aggTypeStats[t].total   += st.total   || 0;
+      });
+    });
+    const existingBadges = useFirebase
+      ? await getBadges(user.uid)
+      : JSON.parse(localStorage.getItem("maf_badges_" + user.uid) || "[]");
+    const redemptionCount = useFirebase
+      ? await getRedemptionCount(user.uid).catch(() => 0)
+      : MockRobux.getHistory(user.uid).length;
+
+    const context = {
+      session:         sessionData,
+      recentSessions:  allSessions,
+      streak:          newStreak,
+      totalProblems,
+      typeStats:       aggTypeStats,
+      redemptionCount
+    };
+
+    const newBadges = evaluateBadges(context, existingBadges);
+
+    if (newBadges.length) {
+      // Award badges in Firestore
+      const newIds = newBadges.map(b => b.id);
+      useFirebase
+        ? await awardBadges(user.uid, newIds)
+        : (() => {
+        const existing = JSON.parse(localStorage.getItem("maf_badges_" + user.uid) || "[]");
+        localStorage.setItem("maf_badges_" + user.uid, JSON.stringify([...new Set([...existing, ...newIds])]));
+      })();
+
+      // Show badge unlock overlays sequentially
+      window._badgeQueue = [...newBadges];
+      showNextBadge();
+    }
+
+    // Show streak on summary
+    if (newStreak > 1) {
+      const streakEl = document.getElementById('summaryTitle');
+      streakEl.textContent += ` ${newStreak} day streak! 🔥`;
+    }
+  } catch(e) { console.warn('Badge check failed:', e); }
+
   // Auto-claim if at threshold
   if (totalPts >= threshold) {
     try {
@@ -321,6 +404,22 @@ async function finish() {
 
 window.closeCelebrate = function() {
   document.getElementById('celebrateOverlay').classList.remove('show');
+};
+
+// Badge queue display
+window._badgeQueue = [];
+function showNextBadge() {
+  if (!window._badgeQueue.length) return;
+  const badge = window._badgeQueue.shift();
+  document.getElementById('badgeEmoji').textContent = badge.emoji;
+  document.getElementById('badgeName').textContent  = badge.name;
+  document.getElementById('badgeDesc').textContent  = badge.desc;
+  document.getElementById('badgeOverlay').classList.add('show');
+}
+window.closeBadge = function() {
+  document.getElementById('badgeOverlay').classList.remove('show');
+  // Show next badge if queued
+  setTimeout(() => showNextBadge(), 300);
 };
 
 // Wire up
