@@ -361,17 +361,7 @@ async function finish() {
       redemptionCount
     };
 
-    console.log('[Badges] Context:', JSON.stringify({
-      accuracy: context.session?.accuracy,
-      avgTimeMs: context.session?.avgTimeMs,
-      streak: context.streak,
-      totalProblems: context.totalProblems,
-      redemptionCount: context.redemptionCount
-    }));
-    console.log('[Badges] Already earned:', existingBadges);
-
     const newBadges = evaluateBadges(context, existingBadges);
-    console.log('[Badges] New badges earned:', newBadges.map(b => b.id));
 
     if (newBadges.length) {
       // Award badges in Firestore
