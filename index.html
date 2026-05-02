@@ -2,6 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#C9561E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MAF">
+  <link rel="apple-touch-icon" href="/assets/icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/assets/icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/assets/icons/icon-192.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>MAF — Math + Fun v5</title>
   <link rel="stylesheet" href="css/styles.css">
@@ -75,6 +84,20 @@
       <div class="card-title">Recent performance by type</div>
       <div class="card-sub">Based on your last sessions</div>
       <div id="perfRows"></div>
+    </div>
+  
+    <!-- PWA Install Banner -->
+    <div id="installBanner" class="card mt-16" style="display:none;background:linear-gradient(135deg,rgba(201,86,30,.15),rgba(200,130,26,.1));border-color:var(--ora)">
+      <div class="row-between">
+        <div>
+          <div class="card-title">📱 Install MAF on your iPad</div>
+          <div class="card-sub">Add to your home screen for the full app experience — works offline too!</div>
+        </div>
+        <div class="row" style="gap:8px;flex-shrink:0">
+          <button class="btn btn-primary" id="installBtn">Install</button>
+          <button class="btn btn-ghost btn-sm" id="dismissInstall">Later</button>
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -151,5 +174,58 @@ try {
   document.getElementById('rankHint').textContent = rank ? `You're #${rank} this week` : 'See how you rank';
 } catch {}
 </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(reg => console.log('[PWA] Service worker registered:', reg.scope))
+          .catch(err => console.warn('[PWA] Service worker failed:', err));
+      });
+    }
+  
+
+// ── PWA INSTALL PROMPT ────────────────────────────────────────
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Show banner if not previously dismissed
+  if (!localStorage.getItem('maf_install_dismissed')) {
+    document.getElementById('installBanner').style.display = '';
+  }
+});
+
+document.getElementById('installBtn')?.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  if (outcome === 'accepted') {
+    document.getElementById('installBanner').style.display = 'none';
+  }
+  deferredPrompt = null;
+});
+
+document.getElementById('dismissInstall')?.addEventListener('click', () => {
+  document.getElementById('installBanner').style.display = 'none';
+  localStorage.setItem('maf_install_dismissed', '1');
+});
+
+// iOS Safari — show manual instructions since it doesn't support beforeinstallprompt
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isInStandalone = window.navigator.standalone;
+if (isIOS && !isInStandalone && !localStorage.getItem('maf_install_dismissed')) {
+  const banner = document.getElementById('installBanner');
+  banner.style.display = '';
+  banner.querySelector('.card-sub').textContent =
+    'Tap the Share button in Safari, then "Add to Home Screen" for the full app experience!';
+  document.getElementById('installBtn').style.display = 'none';
+}
+</script>
+  <script type="module">
+    import { registerServiceWorker, showIOSInstallPrompt } from '/js/pwa.js';
+    registerServiceWorker();
+    showIOSInstallPrompt();
+  </script>
 </body>
 </html>
