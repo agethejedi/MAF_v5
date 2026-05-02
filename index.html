@@ -269,10 +269,6 @@ if (isIOS && !isInStandalone && !localStorage.getItem('maf_install_dismissed')) 
   document.getElementById('installBtn').style.display = 'none';
 }
 </script>
-  <script type="module">
-    // PWA handled by inline service worker registration
-    registerServiceWorker();
-    showIOSInstallPrompt();
-  </script>
+
 </body>
 </html>
