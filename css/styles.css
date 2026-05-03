@@ -393,3 +393,29 @@ hr.divider { border: 0; border-top: 1px solid var(--edge); margin: 16px 0; }
 .text-sm    { font-size: 12px; }
 .kpi { font-family: var(--font-display); font-size: 26px; color: var(--cream); }
 .hidden { display: none !important; }
+
+/* ── COPYRIGHT FOOTER ────────────────────────────────────────── */
+#maf-footer {
+  width: 100%;
+  padding: 14px 24px;
+  border-top: 1px solid var(--edge);
+  background: var(--surf);
+  margin-top: auto;
+}
+.maf-footer-inner {
+  max-width: 1150px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.maf-footer-inner a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color .15s;
+}
+.maf-footer-inner a:hover { color: var(--cream-dk); }
+.footer-divider { color: var(--edge); }
