@@ -28,6 +28,20 @@
   <aside class="sidebar" id="sidebar"></aside>
   <main class="main-content">
 
+    <!-- Session recovery banner -->
+    <div id="resumeBanner" class="hidden" style="background:linear-gradient(135deg,rgba(201,86,30,.15),rgba(200,130,26,.1));border:1px solid var(--ora);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px">
+      <div class="row-between">
+        <div>
+          <div style="font-weight:700;color:var(--cream)">⚡ You have an unfinished session!</div>
+          <div class="text-muted text-sm mt-8" id="resumeDesc">Pick up where you left off or start fresh.</div>
+        </div>
+        <div class="row" style="gap:8px;flex-shrink:0">
+          <button class="btn btn-primary btn-sm" id="resumeBtn">Resume →</button>
+          <button class="btn btn-ghost btn-sm" id="discardBtn">Start fresh</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Active session -->
     <div id="sessionArea">
       <div class="wb-layout">
@@ -129,6 +143,30 @@
   <button class="btn btn-primary btn-lg" onclick="closeBadge()">Awesome! 🎉</button>
 </div>
 
+<!-- Fun Rating Overlay -->
+<div class="celebrate-overlay" id="funRatingOverlay">
+  <div style="text-align:center;max-width:340px;width:100%">
+    <div style="font-size:48px;margin-bottom:12px">⭐</div>
+    <div class="celebrate-title" style="font-size:22px">How fun was that?</div>
+    <div class="celebrate-sub mt-8">Rate your session!</div>
+    <div style="display:flex;justify-content:center;gap:12px;margin:20px 0" id="funStars">
+      <span class="fun-star" data-rating="1" onclick="selectStar(1)" style="font-size:40px;cursor:pointer;opacity:.4">😞</span>
+      <span class="fun-star" data-rating="2" onclick="selectStar(2)" style="font-size:40px;cursor:pointer;opacity:.4">😐</span>
+      <span class="fun-star" data-rating="3" onclick="selectStar(3)" style="font-size:40px;cursor:pointer;opacity:.4">🙂</span>
+      <span class="fun-star" data-rating="4" onclick="selectStar(4)" style="font-size:40px;cursor:pointer;opacity:.4">😄</span>
+      <span class="fun-star" data-rating="5" onclick="selectStar(5)" style="font-size:40px;cursor:pointer;opacity:.4">🤩</span>
+    </div>
+    <textarea id="funComment" class="input" placeholder="What would make MAF more fun? (optional)"
+              style="height:70px;resize:none;margin-bottom:12px;font-size:14px"></textarea>
+    <button class="btn btn-primary btn-lg" id="submitFunBtn" onclick="submitFunRating()" disabled style="width:100%">
+      Submit ✓
+    </button>
+    <button class="btn btn-ghost btn-sm mt-8" onclick="skipFunRating()" style="width:100%">
+      Skip
+    </button>
+  </div>
+</div>
+
 <!-- Celebration overlay -->
 <div class="celebrate-overlay" id="celebrateOverlay">
   <div class="celebrate-emoji">🎮</div>
@@ -147,6 +185,7 @@ import { isFirebaseConfigured } from '../js/firebase-config.js';
 import { saveSession, addRobuxPoints, getRobuxProgress, claimCode, getParentSettings, calcPoints, updateStreak, getBadges, awardBadges, getSessions, getRedemptionHistory, getStreak } from '../js/firebase-service.js';
 import { MockAuth, MockSessions, MockRobux, MockParentSettings } from '../js/mock-service.js';
 import { evaluateBadges } from '../js/badges.js';
+import { shouldShowFunRating, saveFunRating } from '../js/feedback.js';
 
 const useFirebase = isFirebaseConfigured();
 const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
@@ -164,6 +203,44 @@ const state = {
   idx: 0, correct: 0, streak: 0, times: [], current: null,
   startedAt: 0, typeStats: {}, sessionPoints: 0
 };
+
+// ── SESSION RECOVERY ─────────────────────────────────────────
+const SESSION_KEY = 'maf_session_recovery_' + (user?.uid || 'guest');
+
+function saveSessionState() {
+  const snapshot = {
+    grade:        state.grade,
+    difficulty:   state.difficulty,
+    types:        state.types,
+    total:        state.total,
+    avatar:       state.avatar,
+    idx:          state.idx,
+    correct:      state.correct,
+    streak:       state.streak,
+    times:        state.times,
+    typeStats:    state.typeStats,
+    sessionPoints:state.sessionPoints,
+    savedAt:      Date.now()
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(snapshot));
+}
+
+function clearSessionState() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+function loadSavedSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    if (!saved) return null;
+    // Expire after 2 hours
+    if (Date.now() - saved.savedAt > 7200000) {
+      clearSessionState();
+      return null;
+    }
+    return saved;
+  } catch { return null; }
+}
 
 // Update avatar in nav
 const navAv = document.querySelector('.nav-avatar img');
@@ -301,6 +378,7 @@ async function finish() {
   const pct       = Math.min(100, Math.round((totalPts / threshold) * 100));
 
   // Show summary
+  clearSessionState(); // Session complete — no need to recover
   document.getElementById('sessionArea').classList.add('hidden');
   document.getElementById('summaryArea').classList.remove('hidden');
   document.getElementById('sumAccuracy').textContent = accuracy + '%';
@@ -385,6 +463,14 @@ async function finish() {
     }
   } catch(e) { console.warn('Badge check failed:', e); }
 
+  // Fun rating check
+  const showFun = await shouldShowFunRating(user).catch(() => false);
+  if (showFun) {
+    setTimeout(() => {
+      document.getElementById('funRatingOverlay').classList.add('show');
+    }, 1200);
+  }
+
   // Auto-claim if at threshold
   if (totalPts >= threshold) {
     try {
@@ -422,6 +508,24 @@ window.closeBadge = function() {
   setTimeout(() => showNextBadge(), 300);
 };
 
+// Fun rating functions
+let _funRating = 0;
+window.selectStar = function(rating) {
+  _funRating = rating;
+  document.querySelectorAll('.fun-star').forEach((s, i) => {
+    s.style.opacity = i < rating ? '1' : '.3';
+  });
+  document.getElementById('submitFunBtn').disabled = false;
+};
+window.submitFunRating = async function() {
+  const comment = document.getElementById('funComment').value.trim();
+  await saveFunRating(user, _funRating, comment);
+  document.getElementById('funRatingOverlay').classList.remove('show');
+};
+window.skipFunRating = function() {
+  document.getElementById('funRatingOverlay').classList.remove('show');
+};
+
 // Wire up
 document.getElementById('checkBtn').addEventListener('click', check);
 document.getElementById('answerInput').addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
@@ -433,7 +537,44 @@ document.getElementById('voiceStrip').addEventListener('click', () => {
   toast('Hint shown!');
 });
 
-nextProblem();
+// Check for saved session
+const savedSession = loadSavedSession();
+if (savedSession && savedSession.idx > 0 && savedSession.idx < savedSession.total) {
+  const banner = document.getElementById('resumeBanner');
+  const desc   = document.getElementById('resumeDesc');
+  banner.classList.remove('hidden');
+  const pct = Math.round((savedSession.idx / savedSession.total) * 100);
+  desc.textContent = `You were on problem ${savedSession.idx} of ${savedSession.total} (${pct}% done) · ${savedSession.sessionPoints} pts earned so far`;
+
+  document.getElementById('resumeBtn').addEventListener('click', () => {
+    // Restore state
+    Object.assign(state, {
+      grade:         savedSession.grade,
+      difficulty:    savedSession.difficulty,
+      types:         savedSession.types,
+      total:         savedSession.total,
+      idx:           savedSession.idx,
+      correct:       savedSession.correct,
+      streak:        savedSession.streak,
+      times:         savedSession.times,
+      typeStats:     savedSession.typeStats,
+      sessionPoints: savedSession.sessionPoints,
+    });
+    document.getElementById('liveCorrect').textContent = state.correct;
+    document.getElementById('liveStreak').textContent  = state.streak;
+    document.getElementById('streakBadge').textContent  = state.streak + ' streak';
+    banner.classList.add('hidden');
+    nextProblem();
+  });
+
+  document.getElementById('discardBtn').addEventListener('click', () => {
+    clearSessionState();
+    banner.classList.add('hidden');
+    nextProblem();
+  });
+} else {
+  nextProblem();
+}
 </script>
 
   <script>
