@@ -15,8 +15,8 @@
   <title>MAF — Sign In</title>
   <link rel="stylesheet" href="css/styles.css">
   <style>
-    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
-    .login-wrap { width:100%; max-width:460px; padding:24px; }
+    body { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; }
+    .login-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; padding:24px; }
     .login-logo { text-align:center; margin-bottom:24px; }
     .login-logo .big { font-family:var(--font-display); font-size:56px; color:var(--ora); }
     .login-logo p { color:var(--muted); font-size:14px; margin-top:4px; }
@@ -52,7 +52,7 @@
   </style>
 </head>
 <body>
-<div class="login-wrap">
+<div class="login-wrap"><div style="width:100%;max-width:460px;padding:24px">
   <div class="login-logo">
     <div class="big">MAF</div>
     <p>Math + Fun — Sign in to continue</p>
@@ -423,6 +423,8 @@ document.addEventListener('keydown', e => {
   </script>
 
 
+</div>
+</div>
 <footer style="width:100%;padding:14px 24px;border-top:1px solid var(--edge);background:var(--surf);margin-top:24px">
   <div style="max-width:800px;margin:0 auto;display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--muted)">
     <span>© 2026 RiskXLabs LLC. All rights reserved.</span>
