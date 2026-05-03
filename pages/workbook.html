@@ -345,6 +345,7 @@ function check() {
   document.getElementById('streakBadge').textContent  = `${state.streak} streak`;
   document.getElementById('timeBadge').textContent   = `Avg ${fmtMs(state.times.reduce((a,b)=>a+b,0)/state.times.length)}`;
   updateTypePerfRows();
+  saveSessionState(); // Save after every answer for recovery
   nextProblem();
 }
 
