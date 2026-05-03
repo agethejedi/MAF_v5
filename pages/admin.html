@@ -122,6 +122,9 @@
     <a class="ani" id="nav-analytics" href="#" onclick="showSection('analytics',this)">
       <span class="icon">📈</span>Analytics
     </a>
+    <a class="ani" id="nav-feedback" href="#" onclick="showSection('feedback',this)">
+      <span class="icon">💬</span>Feedback
+    </a>
     <a class="ani" id="nav-export" href="#" onclick="showSection('export',this)">
       <span class="icon">↓</span>Export
     </a>
@@ -130,7 +133,8 @@
       <div style="font-size:10px;color:var(--muted)">Codes available</div>
       <div style="font-family:var(--font-display);font-size:20px;color:var(--ora-lt)" id="sideCodesCount">—</div>
     </div>
-    <a class="ani" href="../index.html" style="margin-top:8px">
+    <a class="ani" href="privacy.html" target="_blank"><span class="icon">📄</span>Privacy Policy</a>
+        <a class="ani" href="../index.html" style="margin-top:8px">
       <span class="icon">←</span>Back to app
     </a>
   </aside>
@@ -323,6 +327,34 @@
         <div class="card">
           <div class="card-title">Code inventory status</div>
           <div id="codeInventoryStats" class="mt-8">
+            <div class="text-muted text-sm">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FEEDBACK -->
+    <div class="section" id="section-feedback">
+      <div class="section-title">💬 Feedback & NPS</div>
+      <div class="section-sub">Child fun ratings and parent NPS scores from beta users.</div>
+
+      <div class="metric-grid">
+        <div class="metric-card"><div class="metric-num" id="fbNPS">—</div><div class="metric-lbl">NPS Score</div></div>
+        <div class="metric-card"><div class="metric-num" id="fbPromPct">—</div><div class="metric-lbl">Promoters</div></div>
+        <div class="metric-card"><div class="metric-num" id="fbAvgFun">—</div><div class="metric-lbl">Avg fun rating</div></div>
+        <div class="metric-card"><div class="metric-num" id="fbTotal">—</div><div class="metric-lbl">Total responses</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">Parent NPS responses</div>
+          <div id="npsResponses" class="mt-8">
+            <div class="text-muted text-sm">Loading...</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Child fun ratings</div>
+          <div id="funResponses" class="mt-8">
             <div class="text-muted text-sm">Loading...</div>
           </div>
         </div>
@@ -831,6 +863,95 @@ document.getElementById('exportSessionsBtn').addEventListener('click', async () 
 document.getElementById('exportRedemptionsBtn').addEventListener('click', async () => {
   toast('Redemptions export coming soon', 'wrong');
 });
+
+// ── FEEDBACK ANALYTICS ───────────────────────────────────────
+async function loadFeedback() {
+  window._feedbackLoaded = true;
+  try {
+    const { getFirestore, collection, query, orderBy, limit, getDocs } =
+      await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    const { initFirebase } = await import('../js/firebase-service.js');
+    const fb  = await initFirebase();
+    const db  = fb.db || getFirestore();
+    const snap = await getDocs(query(collection(db, 'feedback'), orderBy('at', 'desc'), limit(100)));
+    const all  = [];
+    snap.forEach(d => all.push({ id: d.id, ...d.data() }));
+
+    const npsItems = all.filter(f => f.type === 'nps');
+    const funItems = all.filter(f => f.type === 'fun_rating');
+
+    // NPS calculation
+    const promoters  = npsItems.filter(f => f.score >= 9).length;
+    const detractors = npsItems.filter(f => f.score <= 6).length;
+    const nps = npsItems.length
+      ? Math.round(((promoters - detractors) / npsItems.length) * 100)
+      : null;
+    const promPct = npsItems.length ? Math.round((promoters / npsItems.length) * 100) : null;
+
+    // Fun rating average
+    const avgFun = funItems.length
+      ? (funItems.reduce((s, f) => s + (f.rating || 0), 0) / funItems.length).toFixed(1)
+      : null;
+
+    document.getElementById('fbNPS').textContent    = nps !== null ? nps : '—';
+    document.getElementById('fbPromPct').textContent = promPct !== null ? promPct + '%' : '—';
+    document.getElementById('fbAvgFun').textContent  = avgFun || '—';
+    document.getElementById('fbTotal').textContent   = all.length;
+
+    // NPS responses table
+    const npsEl = document.getElementById('npsResponses');
+    if (npsItems.length) {
+      npsEl.innerHTML = `<table class="data-table">
+        <thead><tr><th>Score</th><th>Category</th><th>Comment</th><th>Date</th></tr></thead>
+        <tbody>${npsItems.map(f => {
+          const color = f.score >= 9 ? 'var(--green)' : f.score >= 7 ? 'var(--amber)' : 'var(--red)';
+          return `<tr>
+            <td style="color:${color};font-weight:700">${f.score}</td>
+            <td><span class="badge" style="color:${color};border-color:${color}">${f.category || '—'}</span></td>
+            <td style="color:var(--muted);font-size:11px">${f.comment || '—'}</td>
+            <td style="color:var(--muted)">${fmtDate(f.at)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    } else {
+      npsEl.innerHTML = '<div class="text-muted text-sm">No NPS responses yet.</div>';
+    }
+
+    // Fun ratings
+    const funEl = document.getElementById('funResponses');
+    if (funItems.length) {
+      const dist = [0,0,0,0,0];
+      funItems.forEach(f => { if (f.rating >= 1 && f.rating <= 5) dist[f.rating-1]++; });
+      const emojis = ['😞','😐','🙂','😄','🤩'];
+      funEl.innerHTML = dist.map((count, i) => `
+        <div class="row-between" style="padding:5px 0;border-bottom:1px solid var(--edge)">
+          <span style="font-size:20px">${emojis[i]}</span>
+          <div class="bar-bg" style="flex:1;height:6px;margin:0 10px">
+            <div class="bar-fill" style="width:${funItems.length ? Math.round(count/funItems.length*100) : 0}%;background:var(--ora)"></div>
+          </div>
+          <span style="font-size:12px;color:var(--cream-dk);width:24px;text-align:right">${count}</span>
+        </div>`).join('') +
+        (funItems.filter(f => f.comment).length ? `
+        <div class="card-title mt-12" style="font-size:13px">Comments</div>
+        ${funItems.filter(f => f.comment).slice(0, 5).map(f =>
+          `<div style="font-size:12px;color:var(--muted);padding:5px 0;border-bottom:1px solid var(--edge)">"${f.comment}"</div>`
+        ).join('')}` : '');
+    } else {
+      funEl.innerHTML = '<div class="text-muted text-sm">No fun ratings yet.</div>';
+    }
+  } catch(e) {
+    console.error('Feedback load error:', e);
+    document.getElementById('npsResponses').innerHTML = '<div class="text-muted text-sm">Firebase required for feedback analytics.</div>';
+    document.getElementById('funResponses').innerHTML = '<div class="text-muted text-sm">Firebase required for feedback analytics.</div>';
+  }
+}
+
+// Override showSection to lazy-load feedback
+const _origShowSection = window.showSection;
+window.showSection = function(name, el) {
+  _origShowSection(name, el);
+  if (name === 'feedback' && !window._feedbackLoaded) loadFeedback();
+};
 
 // ── INIT ──────────────────────────────────────────────────────
 await loadOverview();
