@@ -119,6 +119,24 @@ export async function renderNav({ activePage = '', showSidebar = true } = {}) {
 
   // Load robux progress
   await updateMeter(user);
+
+  // ── COPYRIGHT FOOTER ─────────────────────────────────────────
+  // Inject footer on every page if not already present
+  if (!document.getElementById('maf-footer')) {
+    const footer = document.createElement('footer');
+    footer.id = 'maf-footer';
+    footer.innerHTML = `
+      <div class="maf-footer-inner">
+        <span>© 2026 RiskXLabs LLC. All rights reserved.</span>
+        <span class="footer-divider">·</span>
+        <a href="${BASE}pages/privacy.html" target="_blank">Privacy Policy</a>
+        <span class="footer-divider">·</span>
+        <a href="${BASE}pages/terms.html" target="_blank">Terms of Service</a>
+        <span class="footer-divider">·</span>
+        <a href="mailto:Team@RiskXLabs.com">Team@RiskXLabs.com</a>
+      </div>`;
+    document.body.appendChild(footer);
+  }
 }
 
 export async function updateMeter(user) {
