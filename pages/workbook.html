@@ -185,6 +185,7 @@ import { isFirebaseConfigured } from '../js/firebase-config.js';
 import { saveSession, addRobuxPoints, getRobuxProgress, claimCode, getParentSettings, calcPoints, updateStreak, getBadges, awardBadges, getSessions, getRedemptionHistory, getStreak } from '../js/firebase-service.js';
 import { MockAuth, MockSessions, MockRobux, MockParentSettings } from '../js/mock-service.js';
 import { evaluateBadges } from '../js/badges.js';
+import { notifyReward, notifyMilestone, notifyWeeklyDigest } from '../js/notifications.js';
 import { shouldShowFunRating, saveFunRating } from '../js/feedback.js';
 
 const useFirebase = isFirebaseConfigured();
