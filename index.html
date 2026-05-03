@@ -295,6 +295,24 @@ if (showOb) {
   document.getElementById('obOverlay')?.classList.add('show');
 }
 
+// ── NPS CHECK (parents only) ─────────────────────────────────
+const localProf = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+if (localProf?.role === 'parent' && !showOb) {
+  const showNpsFlag = await shouldShowNPS(user).catch(() => false);
+  if (showNpsFlag) {
+    // Build NPS buttons
+    const npsWrap = document.getElementById('npsButtons');
+    if (npsWrap) {
+      npsWrap.innerHTML = [...Array(11)].map((_, i) =>
+        `<button onclick="selectNPS(${i})" id="nps-btn-${i}"
+          style="width:38px;height:38px;border-radius:8px;border:1px solid var(--edge);
+          background:var(--bg);color:var(--cream-dk);font-size:13px;font-weight:700;cursor:pointer">${i}</button>`
+      ).join('');
+    }
+    setTimeout(() => document.getElementById('npsOverlay')?.classList.add('show'), 2000);
+  }
+}
+
 // Personalize greeting
 const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
 const name = profile.name || user?.email?.split('@')[0] || 'there';
@@ -396,6 +414,40 @@ try {
     }
   
 
+// ── NPS FUNCTIONS ────────────────────────────────────────────
+let _npsScore = -1;
+window.selectNPS = function(score) {
+  _npsScore = score;
+  // Highlight selected
+  for (let i = 0; i <= 10; i++) {
+    const btn = document.getElementById('nps-btn-' + i);
+    if (!btn) continue;
+    const color = i <= 6 ? 'var(--red)' : i <= 8 ? 'var(--amber)' : 'var(--green)';
+    btn.style.background = i === score ? color : 'var(--bg)';
+    btn.style.color      = i === score ? 'white' : 'var(--cream-dk)';
+    btn.style.borderColor = i === score ? color : 'var(--edge)';
+  }
+  // Show follow-up
+  const fu = document.getElementById('npsFollowUp');
+  const ft = document.getElementById('npsFollowUpText');
+  if (fu && ft) {
+    ft.textContent = getFeedbackPrompt(score);
+    fu.style.display = '';
+  }
+  document.getElementById('submitNpsBtn').disabled = false;
+};
+window.submitNPS = async function() {
+  if (_npsScore < 0) return;
+  const comment = document.getElementById('npsComment')?.value.trim() || '';
+  await saveNPS(user, _npsScore, comment);
+  document.getElementById('npsOverlay').classList.remove('show');
+};
+window.skipNPS = function() {
+  // Still record that we showed it so we don't show again for a week
+  localStorage.setItem('maf_nps_last_' + user.uid, Date.now());
+  document.getElementById('npsOverlay').classList.remove('show');
+};
+
 // ── ONBOARDING FUNCTIONS ──────────────────────────────────────
 let obThreshold = 100;
 let obSelectedGrade = null;
@@ -404,6 +456,16 @@ window.obNext = function(role, step) {
   document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
   const next = document.getElementById(`ob-${role}-${step}`);
   if (next) next.classList.add('active');
+};
+
+window.obCheckAge = function() {
+  const checked = document.getElementById('obAgeCheck')?.checked;
+  const btn = document.getElementById('obGradeBtn');
+  if (btn) {
+    btn.disabled = !checked;
+    btn.style.opacity = checked ? '1' : '.5';
+    btn.style.cursor = checked ? 'pointer' : 'not-allowed';
+  }
 };
 
 window.obSelectGrade = function(grade) {
@@ -519,6 +581,33 @@ if (isIOS && !isInStandalone && !localStorage.getItem('maf_install_dismissed')) 
 </script>
 
 
+<!-- NPS Overlay -->
+<div class="celebrate-overlay" id="npsOverlay">
+  <div style="text-align:center;max-width:420px;width:100%;background:var(--surf);border:1px solid var(--edge);border-radius:20px;padding:28px 24px">
+    <div style="font-size:42px;margin-bottom:12px">📊</div>
+    <div style="font-family:var(--font-display);font-size:22px;color:var(--cream);margin-bottom:8px">Quick question!</div>
+    <div style="font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.6">
+      How likely are you to recommend MAF to another parent?
+    </div>
+    <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="npsButtons">
+<!-- NPS buttons injected by JS -->
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:20px;padding:0 4px">
+      <span>Not likely</span><span>Very likely</span>
+    </div>
+    <div id="npsFollowUp" style="display:none;margin-bottom:16px">
+      <div style="font-size:13px;color:var(--cream-dk);margin-bottom:8px" id="npsFollowUpText"></div>
+      <textarea id="npsComment" class="input" placeholder="Your feedback (optional)"
+                style="height:70px;resize:none;font-size:14px"></textarea>
+    </div>
+    <button class="btn btn-primary" id="submitNpsBtn" onclick="submitNPS()" disabled
+            style="width:100%;margin-top:8px">Submit feedback</button>
+    <button class="btn btn-ghost btn-sm" onclick="skipNPS()" style="width:100%;margin-top:8px">
+      Maybe later
+    </button>
+  </div>
+</div>
+
 <!-- ── ONBOARDING OVERLAY ─────────────────────────────────────── -->
 <div class="ob-overlay" id="obOverlay">
   <div class="ob-modal">
@@ -584,7 +673,16 @@ if (isIOS && !isInStandalone && !localStorage.getItem('maf_install_dismissed')) 
         <div class="ob-grade-btn" onclick="obSelectGrade(7)">7th</div>
         <div class="ob-grade-btn" onclick="obSelectGrade(8)">8th</div>
       </div>
-      <button class="ob-btn" id="obGradeBtn" onclick="obFinishChild()">Start learning! 🚀</button>
+      <div style="background:var(--bg);border:1px solid var(--edge);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px">
+        <label class="ob-check-label" style="margin:0">
+          <input type="checkbox" id="obAgeCheck" onchange="obCheckAge()">
+          <span style="font-size:13px;color:var(--cream-dk)">I am 13 or older — <em style="color:var(--muted)">or my parent has already created an account and given permission for me to use MAF</em></span>
+        </label>
+      </div>
+      <button class="ob-btn" id="obGradeBtn" onclick="obFinishChild()" style="opacity:.5;cursor:not-allowed" disabled>Start learning! 🚀</button>
+      <div class="text-muted text-sm mt-8" style="text-align:center">
+        Under 13? Ask a parent to <a href="login.html" style="color:var(--ora-lt)">create a parent account</a> and link it to yours first.
+      </div>
     </div>
 
     <!-- PARENT: Step 1 — Welcome -->
