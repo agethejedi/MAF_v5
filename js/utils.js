@@ -110,6 +110,14 @@ function bounds(grade, difficulty) {
   return BOUNDS[difficulty]?.[grade] || { min: 0, max: 20 };
 }
 
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 export function makeProblem({ grade = 1, types = ['add', 'sub'], difficulty = 'easy' }) {
   const b    = bounds(grade, difficulty);
   const pick = types[Math.floor(Math.random() * types.length)];
@@ -258,6 +266,242 @@ export function makeProblem({ grade = 1, types = ['add', 'sub'], difficulty = 'e
     return { type: pick, question: q, answer: a, mode: 'numeric' };
   }
 
+
+  // ── Place Value (Grades 2+) ───────────────────────────────
+  if (pick === 'place_value') {
+    const nums = [
+      randInt(100, 999), randInt(1000, 9999),
+      randInt(10000, 99999), randInt(100000, 999999)
+    ];
+    const n = grade <= 3 ? nums[randInt(0,1)] : grade <= 5 ? nums[randInt(1,2)] : nums[randInt(2,3)];
+    const digits = String(n).split('').reverse(); // ones, tens, hundreds...
+    const placeNames = ['ones','tens','hundreds','thousands','ten thousands','hundred thousands'];
+    const placeIdx = randInt(0, digits.length - 1);
+    const digit = parseInt(digits[placeIdx]);
+    const placeValue = digit * Math.pow(10, placeIdx);
+    const type = randInt(0, 2);
+    if (type === 0) {
+      return {
+        type: pick,
+        question: `What is the value of the digit ${digit} in the number ${n.toLocaleString()}?`,
+        answer: placeValue,
+        mode: 'numeric'
+      };
+    } else if (type === 1) {
+      return {
+        type: pick,
+        question: `In the number ${n.toLocaleString()}, what place is the digit ${digit} in?`,
+        answer: placeNames[placeIdx],
+        mode: 'text'
+      };
+    } else {
+      const choices = [
+        placeValue,
+        placeValue * 10,
+        Math.floor(placeValue / 10) || digit,
+        placeValue * 100
+      ].filter((v,i,a) => a.indexOf(v) === i).slice(0,4);
+      shuffle(choices);
+      return {
+        type: pick,
+        question: `In the number ${n.toLocaleString()}, what is the value of the digit ${digit} in the ${placeNames[placeIdx]} place?`,
+        answer: String(placeValue),
+        choices,
+        mode: 'choice'
+      };
+    }
+  }
+
+  // ── Expanded Form (Grades 2+) ─────────────────────────────
+  if (pick === 'expanded_form') {
+    const n = grade <= 3 ? randInt(100, 9999) : grade <= 5 ? randInt(1000, 99999) : randInt(10000, 999999);
+    const str = String(n);
+    const parts = [];
+    for (let i = 0; i < str.length; i++) {
+      const d = parseInt(str[i]);
+      if (d > 0) parts.push(d * Math.pow(10, str.length - 1 - i));
+    }
+    const expanded = parts.join(' + ');
+    const type = randInt(0, 1);
+    if (type === 0) {
+      return {
+        type: pick,
+        question: `Write ${n.toLocaleString()} in expanded form.`,
+        answer: expanded,
+        mode: 'text',
+        hint: `Break each digit into its place value. Example: 342 = 300 + 40 + 2`
+      };
+    } else {
+      return {
+        type: pick,
+        question: `What is the standard form of: ${expanded}?`,
+        answer: String(n),
+        mode: 'numeric'
+      };
+    }
+  }
+
+  // ── Word Form (Grades 2+) ─────────────────────────────────
+  if (pick === 'word_form') {
+    const ones = ['','one','two','three','four','five','six','seven','eight','nine',
+                  'ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen',
+                  'seventeen','eighteen','nineteen'];
+    const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+    function toWords(n) {
+      if (n === 0) return 'zero';
+      if (n < 20) return ones[n];
+      if (n < 100) return tens[Math.floor(n/10)] + (n%10 ? '-' + ones[n%10] : '');
+      if (n < 1000) return ones[Math.floor(n/100)] + ' hundred' + (n%100 ? ' ' + toWords(n%100) : '');
+      if (n < 10000) return ones[Math.floor(n/1000)] + ' thousand' + (n%1000 ? ' ' + toWords(n%1000) : '');
+      if (n < 100000) return toWords(Math.floor(n/1000)) + ' thousand' + (n%1000 ? ' ' + toWords(n%1000) : '');
+      return toWords(Math.floor(n/1000)) + ' thousand' + (n%1000 ? ' ' + toWords(n%1000) : '');
+    }
+    const n = grade <= 3 ? randInt(100, 999) : grade <= 5 ? randInt(1000, 9999) : randInt(10000, 99999);
+    const words = toWords(n);
+    const type = randInt(0, 1);
+    if (type === 0) {
+      return {
+        type: pick,
+        question: `Write ${n.toLocaleString()} in word form.`,
+        answer: words,
+        mode: 'text',
+        hint: 'Write the number using words, like "three hundred forty-two"'
+      };
+    } else {
+      return {
+        type: pick,
+        question: `What number is: "${words}"?`,
+        answer: String(n),
+        mode: 'numeric'
+      };
+    }
+  }
+
+  // ── Rounding (Grades 2+) ──────────────────────────────────
+  if (pick === 'rounding') {
+    const places = grade <= 3
+      ? [10, 100]
+      : grade <= 5 ? [10, 100, 1000]
+      : [100, 1000, 10000];
+    const place = places[randInt(0, places.length - 1)];
+    const n = randInt(place * 2, place * 20);
+    const rounded = Math.round(n / place) * place;
+    const placeLabel = place === 10 ? 'ten' : place === 100 ? 'hundred' : place === 1000 ? 'thousand' : 'ten thousand';
+    return {
+      type: pick,
+      question: `Round ${n.toLocaleString()} to the nearest ${placeLabel}.`,
+      answer: rounded,
+      mode: 'numeric',
+      hint: `Look at the digit to the right of the ${placeLabel}s place`
+    };
+  }
+
+  // ── Number Line (Grades 2+) ───────────────────────────────
+  if (pick === 'number_line') {
+    const scaleOpts = grade <= 3
+      ? [{min:0, max:100, step:10}, {min:0, max:50, step:5}, {min:100, max:200, step:10}]
+      : grade <= 5
+      ? [{min:0, max:1000, step:100}, {min:500, max:1500, step:100}, {min:5000, max:6000, step:100}]
+      : [{min:0, max:10000, step:1000}, {min:10000, max:20000, step:1000}];
+    const scale = scaleOpts[randInt(0, scaleOpts.length-1)];
+    const steps = (scale.max - scale.min) / scale.step;
+    const pointStep = randInt(1, steps - 1);
+    const point = scale.min + pointStep * scale.step;
+    const offset = randInt(1, scale.step - 1) * (Math.random() < 0.5 ? 1 : -1);
+    const actualPoint = Math.max(scale.min + 1, Math.min(scale.max - 1, point + offset));
+    const roundTo = scale.step;
+    const rounded = Math.round(actualPoint / roundTo) * roundTo;
+    return {
+      type: pick,
+      question: `A point is plotted at ${actualPoint.toLocaleString()} on a number line from ${scale.min.toLocaleString()} to ${scale.max.toLocaleString()}. What is ${actualPoint.toLocaleString()} rounded to the nearest ${roundTo.toLocaleString()}?`,
+      answer: rounded,
+      mode: 'numeric',
+      hint: `Is ${actualPoint} closer to ${point} or ${point + scale.step}?`
+    };
+  }
+
+  // ── Compare Numbers (Grades 2+) ───────────────────────────
+  if (pick === 'compare') {
+    const n = grade <= 3 ? randInt(100, 9999) : grade <= 5 ? randInt(1000, 99999) : randInt(10000, 999999);
+    const diff = randInt(1, Math.floor(n * 0.1));
+    const m = Math.random() < 0.5 ? n + diff : n - diff;
+    const type = randInt(0, 2);
+    if (type === 0) {
+      const bigger = Math.max(n, m);
+      return {
+        type: pick,
+        question: `Which number is greater: ${n.toLocaleString()} or ${m.toLocaleString()}?`,
+        answer: String(bigger),
+        mode: 'numeric'
+      };
+    } else if (type === 1) {
+      const smaller = Math.min(n, m);
+      return {
+        type: pick,
+        question: `Which number is less: ${n.toLocaleString()} or ${m.toLocaleString()}?`,
+        answer: String(smaller),
+        mode: 'numeric'
+      };
+    } else {
+      const symbol = n > m ? '>' : n < m ? '<' : '=';
+      const choices = ['>', '<', '='];
+      return {
+        type: pick,
+        question: `Compare: ${n.toLocaleString()} ___ ${m.toLocaleString()}. Which symbol goes in the blank?`,
+        answer: symbol,
+        choices,
+        mode: 'choice'
+      };
+    }
+  }
+
+  // ── Place Value Relationships (Grades 3+) ─────────────────
+  if (pick === 'place_relationship') {
+    const pairs = [
+      { places: ['ones', 'tens'], factor: 10 },
+      { places: ['tens', 'hundreds'], factor: 10 },
+      { places: ['hundreds', 'thousands'], factor: 10 },
+      { places: ['thousands', 'ten thousands'], factor: 10 },
+      { places: ['ones', 'hundreds'], factor: 100 },
+      { places: ['tens', 'thousands'], factor: 100 },
+    ];
+    const pair = pairs[randInt(0, pairs.length - 1)];
+    const type = randInt(0, 1);
+    if (type === 0) {
+      return {
+        type: pick,
+        question: `The ${pair.places[1]} place is how many times greater than the ${pair.places[0]} place?`,
+        answer: String(pair.factor),
+        mode: 'numeric'
+      };
+    } else {
+      const n = randInt(10000, 99999);
+      const str = String(n);
+      const placeNames = ['ones','tens','hundreds','thousands','ten thousands'];
+      const i1 = randInt(0, 2);
+      const i2 = i1 + randInt(1, 2);
+      const d1 = parseInt(str[str.length - 1 - i1]);
+      const d2 = parseInt(str[str.length - 1 - i2]);
+      if (d1 > 0 && d2 > 0) {
+        const factor = Math.pow(10, i2 - i1);
+        return {
+          type: pick,
+          question: `In ${n.toLocaleString()}, how many times greater is the value of the digit in the ${placeNames[i2]} place than the digit in the ${placeNames[i1]} place?`,
+          answer: String(factor),
+          mode: 'numeric',
+          hint: `The ${placeNames[i2]} place is ${factor}x the ${placeNames[i1]} place`
+        };
+      }
+      // Fallback
+      return {
+        type: pick,
+        question: `The thousands place is how many times greater than the tens place?`,
+        answer: '100',
+        mode: 'numeric'
+      };
+    }
+  }
+
   // Fallback
   const a = randInt(b.min, b.max), c = randInt(b.min, b.max);
   return { type: 'add', question: `${a} + ${c}`, answer: a + c, mode: 'numeric' };
@@ -266,8 +510,10 @@ export function makeProblem({ grade = 1, types = ['add', 'sub'], difficulty = 'e
 // Problem types available per grade
 export function typesForGrade(grade) {
   const always = ['add', 'sub', 'clock_analog', 'clock_digital', 'time_diff', 'word'];
-  if (grade >= 2) always.push('mul');
-  if (grade >= 3) always.push('div');
+  // New problem types
+  always.push('rounding', 'compare');
+  if (grade >= 2) always.push('mul', 'place_value', 'expanded_form', 'number_line');
+  if (grade >= 3) always.push('div', 'word_form', 'place_relationship');
   if (grade >= 4) always.push('fraction', 'decimal');
   if (grade >= 5) always.push('percent');
   if (grade >= 6) always.push('geometry');
