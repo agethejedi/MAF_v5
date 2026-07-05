@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Lesson</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="manifest" href="../manifest.json">
+  <meta name="theme-color" content="#C9561E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="MAF">
+  <link rel="apple-touch-icon" href="../assets/icons/icon-152.png">
+  <style>
+    .lesson-wrap { max-width: 680px; margin: 0 auto; }
+    .lesson-hero {
+      text-align: center; padding: 24px;
+      background: linear-gradient(135deg,rgba(201,86,30,.15),rgba(200,130,26,.08));
+      border: 1px solid var(--ora); border-radius: var(--radius);
+      margin-bottom: 20px;
+    }
+    .lesson-emoji { font-size: 56px; margin-bottom: 8px; }
+    .lesson-title { font-family: var(--font-display); font-size: 26px; color: var(--cream); }
+    .lesson-intro { font-size: 14px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+
+    .lesson-section {
+      background: var(--surf); border: 1px solid var(--edge);
+      border-radius: var(--radius); padding: 18px; margin-bottom: 14px;
+    }
+    .lesson-section-title {
+      font-size: 13px; font-weight: 700; color: var(--ora-lt);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px;
+    }
+    .concept-text { font-size: 15px; color: var(--cream-dk); line-height: 1.7; }
+
+    .example-box {
+      background: var(--bg); border: 1px solid var(--edge);
+      border-radius: var(--radius-sm); padding: 14px; margin-bottom: 10px;
+    }
+    .example-problem { font-size: 16px; font-weight: 700; color: var(--cream); margin-bottom: 10px; }
+    .example-step {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 6px 0; border-bottom: 1px solid var(--edge); font-size: 14px; color: var(--cream-dk);
+    }
+    .example-step:last-child { border-bottom: none; }
+    .step-num {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--ora); color: var(--cream);
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .example-answer {
+      margin-top: 10px; padding: 8px 12px;
+      background: rgba(90,138,60,.15); border: 1px solid rgba(90,138,60,.3);
+      border-radius: var(--radius-sm); font-weight: 700; color: #8fcf5a;
+    }
+
+    .key-fact {
+      background: rgba(201,86,30,.12); border-left: 4px solid var(--ora);
+      padding: 12px 16px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      font-size: 14px; color: var(--cream); font-weight: 600;
+    }
+
+    /* Practice problems */
+    .practice-item { margin-bottom: 16px; }
+    .practice-problem { font-size: 15px; font-weight: 700; color: var(--cream); margin-bottom: 8px; }
+    .practice-input-row { display: flex; gap: 8px; }
+    .practice-result { font-size: 13px; margin-top: 6px; min-height: 20px; }
+    .practice-hint { font-size: 12px; color: var(--muted); margin-top: 4px; display: none; }
+    .hint-toggle { font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: underline; }
+
+    .fun-fact {
+      background: rgba(200,130,26,.1); border: 1px solid rgba(200,130,26,.3);
+      border-radius: var(--radius); padding: 14px 16px;
+      font-size: 14px; color: var(--cream-dk); line-height: 1.6;
+    }
+
+    .progress-bar-wrap {
+      background: var(--edge); border-radius: 20px; height: 6px; margin: 12px 0;
+    }
+    .progress-bar-fill {
+      height: 100%; border-radius: 20px; background: var(--ora);
+      transition: width .4s;
+    }
+
+    .nav-btns { display: flex; gap: 10px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="lesson-wrap">
+
+      <a href="tutorials.html" style="font-size:13px;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-bottom:12px">
+        ← Back to tutorials
+      </a>
+
+      <div id="lessonContent">
+        <div style="text-align:center;padding:40px;color:var(--muted)">Loading lesson...</div>
+      </div>
+
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav } from '../js/nav.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { MockAuth } from '../js/mock-service.js';
+import { toast } from '../js/utils.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase
+  ? JSON.parse(localStorage.getItem('maf_user') || 'null')
+  : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'tutorials', showSidebar: true });
+
+// Load lesson from localStorage
+const params   = new URLSearchParams(window.location.search);
+const lessonId = params.get('id');
+const lesson   = JSON.parse(localStorage.getItem(`maf_tutorial_${lessonId}`) || 'null');
+
+if (!lesson) {
+  document.getElementById('lessonContent').innerHTML =
+    '<div style="text-align:center;padding:40px;color:var(--muted)">Lesson not found. <a href="tutorials.html" style="color:var(--ora-lt)">Go back →</a></div>';
+} else {
+  renderLesson(lesson);
+}
+
+let practiceScore = 0;
+let practiceTotal = 0;
+
+function renderLesson(l) {
+  practiceScore = 0;
+  practiceTotal = 0;
+  const html = `
+    <!-- Hero -->
+    <div class="lesson-hero">
+      <div class="lesson-emoji">${l.emoji || '📚'}</div>
+      <div class="lesson-title">${l.title}</div>
+      <div class="lesson-intro">${l.intro}</div>
+    </div>
+
+    <!-- Concept -->
+    <div class="lesson-section">
+      <div class="lesson-section-title">📖 The concept</div>
+      <div class="concept-text">${l.concept}</div>
+    </div>
+
+    <!-- Key fact -->
+    <div class="key-fact mb-12">
+      💡 <strong>Remember:</strong> ${l.keyFact}
+    </div>
+
+    <!-- Examples -->
+    <div class="lesson-section">
+      <div class="lesson-section-title">✏️ Worked examples</div>
+      ${renderExample(l.example1, 1)}
+      ${renderExample(l.example2, 2)}
+    </div>
+
+    <!-- Practice -->
+    <div class="lesson-section">
+      <div class="lesson-section-title">🎯 Practice problems</div>
+      <div class="text-muted text-sm mb-12">Try these on your own. Check your answers when ready!</div>
+      ${l.practice.map((p, i) => renderPractice(p, i)).join('')}
+    </div>
+
+    <!-- Fun fact -->
+    <div class="fun-fact">
+      🌍 <strong>Real world:</strong> ${l.funFact}
+    </div>
+
+    <!-- Nav buttons -->
+    <div class="nav-btns">
+      <a href="tutorials.html" class="btn" style="flex:1;text-align:center">← More lessons</a>
+      <a href="tutor.html?tutorial=${l.topicId}" class="btn btn-primary" style="flex:1;text-align:center">
+        Ask AI tutor about this topic →
+      </a>
+    </div>
+  `;
+  document.getElementById('lessonContent').innerHTML = html;
+}
+
+function renderExample(ex, num) {
+  if (!ex) return '';
+  return `<div class="example-box">
+    <div class="example-problem">Example ${num}: ${ex.problem}</div>
+    ${(ex.steps || []).map((s, i) => `
+      <div class="example-step">
+        <div class="step-num">${i+1}</div>
+        <div>${s}</div>
+      </div>`).join('')}
+    <div class="example-answer">✓ Answer: ${ex.answer}</div>
+  </div>`;
+}
+
+function renderPractice(p, i) {
+  practiceTotal++;
+  return `<div class="practice-item" id="practice-${i}">
+    <div class="practice-problem">${i+1}. ${p.problem}</div>
+    <div class="practice-input-row">
+      <input class="input" id="practice-input-${i}" placeholder="Your answer..."
+             style="flex:1" autocomplete="off"
+             onkeydown="if(event.key==='Enter') checkPractice(${i}, '${escStr(p.answer)}', '${escStr(p.hint)}')">
+      <button class="btn btn-primary btn-sm" onclick="checkPractice(${i}, '${escStr(p.answer)}', '${escStr(p.hint)}')">
+        Check
+      </button>
+    </div>
+    <div class="practice-result" id="practice-result-${i}"></div>
+    <div class="practice-hint" id="practice-hint-${i}">💡 Hint: ${p.hint}</div>
+    <span class="hint-toggle" onclick="document.getElementById('practice-hint-${i}').style.display='block';this.style.display='none'">
+      Show hint
+    </span>
+  </div>`;
+}
+
+function escStr(s) {
+  return (s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+window.checkPractice = function(i, answer, hint) {
+  const input  = document.getElementById(`practice-input-${i}`);
+  const result = document.getElementById(`practice-result-${i}`);
+  const val    = input.value.trim().toLowerCase();
+  const correct = val === answer.toLowerCase().trim() ||
+                  parseFloat(val) === parseFloat(answer);
+
+  if (correct) {
+    result.innerHTML = '<span style="color:#8fcf5a;font-weight:700">✓ Correct! Great work!</span>';
+    input.disabled = true;
+    input.style.borderColor = 'var(--green)';
+    practiceScore++;
+    // Check if all done
+    const allInputs = document.querySelectorAll('[id^="practice-input-"]');
+    const allDone = Array.from(allInputs).every(el => el.disabled);
+    if (allDone) {
+      setTimeout(() => {
+        toast(`🎉 ${practiceScore}/${practiceTotal} correct! Great lesson!`, 'correct');
+      }, 400);
+    }
+  } else {
+    result.innerHTML = `<span style="color:var(--red)">✗ Not quite — try again!</span>`;
+    input.style.borderColor = 'var(--red)';
+    // Show hint automatically after wrong answer
+    document.getElementById(`practice-hint-${i}`).style.display = 'block';
+  }
+};
+</script>
+</body>
+</html>
