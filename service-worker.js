@@ -1,5 +1,5 @@
 // service-worker.js — MAF v5 PWA
-const CACHE_NAME = 'maf-v5-cache-v4';
+const CACHE_NAME = 'maf-v5-cache-v5';
 
 const PRECACHE_ASSETS = [
   '/',
