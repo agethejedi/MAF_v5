@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- PWA -->
+  <link rel="manifest" href="../manifest.json">
+  <meta name="theme-color" content="#C9561E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MAF">
+  <link rel="apple-touch-icon" href="../assets/icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="../assets/icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="../assets/icons/icon-192.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — Workbook</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    .wb-layout { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:700px){ .wb-layout { grid-template-columns:1fr; } }
+    .hint-box { background:var(--bg); border:1px solid var(--edge); border-radius:var(--radius-sm); padding:10px 12px; font-size:13px; color:var(--cream-dk); line-height:1.55; min-height:40px; }
+    .type-perf-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; }
+    .type-perf-row:not(:last-child) { border-bottom:1px solid var(--edge); }
+
+    /* ── NUMBER PAD ───────────────────────────────────────────── */
+    .numpad-wrap {
+      display: none; /* shown for numeric mode */
+      flex-direction: column; gap: 6px; margin-bottom: 12px;
+    }
+    .numpad-wrap.show { display: flex; }
+
+    /* Answer display */
+    .numpad-display {
+      background: var(--bg); border: 2px solid var(--edge);
+      border-radius: var(--radius-sm); padding: 12px 16px;
+      font-size: 28px; font-weight: 700; color: var(--cream);
+      text-align: right; min-height: 54px;
+      letter-spacing: 2px; transition: border-color .15s;
+    }
+    .numpad-display.has-value { border-color: var(--ora); }
+    .numpad-display.correct   { border-color: var(--green); background: rgba(90,138,60,.1); }
+    .numpad-display.wrong     { border-color: var(--red);   background: rgba(176,48,32,.1); }
+
+    /* Grid */
+    .numpad-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .numpad-key {
+      padding: 14px 8px; border-radius: var(--radius-sm);
+      border: 1px solid var(--edge); background: var(--surf2);
+      color: var(--cream); font-size: 18px; font-weight: 700;
+      cursor: pointer; transition: all .1s;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 52px; user-select: none;
+    }
+    .numpad-key:active, .numpad-key:hover {
+      background: var(--ora); border-color: var(--ora); transform: scale(.97);
+    }
+    .numpad-key.wide { grid-column: span 2; }
+    .numpad-key.check-key {
+      background: var(--ora); border-color: var(--ora);
+      font-size: 16px;
+    }
+    .numpad-key.check-key:hover { background: var(--ora-lt); }
+    .numpad-key.del-key { background: var(--surf); color: var(--muted); }
+    .numpad-key.neg-key { font-size: 14px; }
+  </style>
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+
+    <!-- Session recovery banner -->
+    <div id="resumeBanner" class="hidden" style="background:linear-gradient(135deg,rgba(201,86,30,.15),rgba(200,130,26,.1));border:1px solid var(--ora);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px">
+      <div class="row-between">
+        <div>
+          <div style="font-weight:700;color:var(--cream)">⚡ You have an unfinished session!</div>
+          <div class="text-muted text-sm mt-8" id="resumeDesc">Pick up where you left off or start fresh.</div>
+        </div>
+        <div class="row" style="gap:8px;flex-shrink:0">
+          <button class="btn btn-primary btn-sm" id="resumeBtn">Resume →</button>
+          <button class="btn btn-ghost btn-sm" id="discardBtn">Start fresh</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active session -->
+    <div id="sessionArea">
+      <div class="wb-layout">
+
+        <!-- Left: problem -->
+        <div class="card">
+          <div class="row-between mb-12">
+            <div class="badge" id="qBadge">1 / 10</div>
+            <div class="badge badge-ora" id="streakBadge">0 streak</div>
+            <div class="badge" id="timeBadge">Avg 0.0s</div>
+          </div>
+
+          <div class="session-progress">
+            <div class="session-progress-fill" id="progressFill" style="width:0%"></div>
+          </div>
+
+          <div class="problem-box mb-12" id="problemArea">
+            <div class="problem-txt" id="problemTxt">Loading...</div>
+            <div class="problem-type" id="problemType"></div>
+          </div>
+
+          <!-- Native Number Pad -->
+          <div class="numpad-wrap" id="numpadWrap">
+            <div class="numpad-display" id="numpadDisplay">—</div>
+            <div class="numpad-grid">
+              <div class="numpad-key" onclick="numpadKey('7')">7</div>
+              <div class="numpad-key" onclick="numpadKey('8')">8</div>
+              <div class="numpad-key" onclick="numpadKey('9')">9</div>
+              <div class="numpad-key del-key" onclick="numpadDel()">⌫</div>
+              <div class="numpad-key" onclick="numpadKey('4')">4</div>
+              <div class="numpad-key" onclick="numpadKey('5')">5</div>
+              <div class="numpad-key" onclick="numpadKey('6')">6</div>
+              <div class="numpad-key neg-key" onclick="numpadNeg()">+/−</div>
+              <div class="numpad-key" onclick="numpadKey('1')">1</div>
+              <div class="numpad-key" onclick="numpadKey('2')">2</div>
+              <div class="numpad-key" onclick="numpadKey('3')">3</div>
+              <div class="numpad-key" onclick="numpadKey('.')">.</div>
+              <div class="numpad-key wide" onclick="numpadKey('0')">0</div>
+              <div class="numpad-key check-key wide" onclick="check()">Check ✓</div>
+            </div>
+          </div>
+
+          <!-- Text input for word/text mode answers -->
+          <div class="row mb-12" id="textInputRow" style="display:none">
+            <input class="answer-input" id="answerInput" placeholder="Your answer..."
+                   autocomplete="off" inputmode="text">
+            <button class="btn btn-primary" id="checkBtn" style="white-space:nowrap;min-width:80px">Check ✓</button>
+          </div>
+
+          <!-- Hidden input used internally for both modes -->
+          <input type="hidden" id="answerInputHidden">
+
+          <div class="voice-strip" id="voiceStrip">
+            <div class="voice-dot"></div>
+            <div class="voice-label">Tap for AI hint</div>
+            <div class="voice-waves">
+              <div class="voice-wave-bar" style="height:6px"></div>
+              <div class="voice-wave-bar" style="height:10px"></div>
+              <div class="voice-wave-bar" style="height:6px"></div>
+              <div class="voice-wave-bar" style="height:10px"></div>
+              <div class="voice-wave-bar" style="height:6px"></div>
+            </div>
+          </div>
+          <div class="hint-box mt-8" id="hintBox" style="display:none"></div>
+        </div>
+
+        <!-- Right: live stats -->
+        <div>
+          <div class="card mb-12">
+            <div class="card-title">This session</div>
+            <div class="grid-2 mt-8">
+              <div class="stat-card"><div class="stat-num" id="liveCorrect">0</div><div class="stat-lbl">Correct</div></div>
+              <div class="stat-card"><div class="stat-num" id="liveStreak">0</div><div class="stat-lbl">Streak</div></div>
+            </div>
+            <div id="typePerfRows" class="mt-12"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">AI Tutor hint</div>
+            <div class="hint-box mt-8" id="tutorHintBox">Answer the problem and I'll help if you get stuck!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary (shown at end) -->
+    <div id="summaryArea" class="hidden">
+      <div class="card" style="max-width:600px;margin:0 auto">
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:56px" id="summaryEmoji">🎉</div>
+          <div class="section-title" id="summaryTitle">Great work!</div>
+        </div>
+        <div class="grid-3 mb-12">
+          <div class="stat-card"><div class="stat-num" id="sumAccuracy">—</div><div class="stat-lbl">Accuracy</div></div>
+          <div class="stat-card"><div class="stat-num" id="sumAvg">—</div><div class="stat-lbl">Avg time</div></div>
+          <div class="stat-card"><div class="stat-num" id="sumPoints">—</div><div class="stat-lbl">Points earned</div></div>
+        </div>
+        <div class="card mb-12" style="background:rgba(201,86,30,.1);border-color:var(--ora)">
+          <div class="row-between">
+            <div>
+              <div style="font-size:13px;color:var(--muted)">Robux progress</div>
+              <div style="font-family:var(--font-display);font-size:22px;color:var(--ora-lt)" id="sumRobux">—</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="location.href='redeem.html'">View →</button>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="row">
+          <button class="btn btn-primary" onclick="location.href='workbook_setup.html'">Another Round</button>
+          <button class="btn btn-ghost" onclick="location.href='../index.html'">Home</button>
+          <button class="btn" onclick="location.href='tutor.html'">AI Tutor</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Badge unlock overlay -->
+<div class="celebrate-overlay" id="badgeOverlay">
+  <div class="celebrate-emoji" id="badgeEmoji">🎯</div>
+  <div class="celebrate-title">Badge unlocked!</div>
+  <div class="celebrate-sub" id="badgeName">Sharp Shooter</div>
+  <div class="celebrate-sub" style="font-size:14px" id="badgeDesc"></div>
+  <button class="btn btn-primary btn-lg" onclick="closeBadge()">Awesome! 🎉</button>
+</div>
+
+<!-- Fun Rating Overlay -->
+<div class="celebrate-overlay" id="funRatingOverlay">
+  <div style="text-align:center;max-width:340px;width:100%">
+    <div style="font-size:48px;margin-bottom:12px">⭐</div>
+    <div class="celebrate-title" style="font-size:22px">How fun was that?</div>
+    <div class="celebrate-sub mt-8">Rate your session!</div>
+    <div style="display:flex;justify-content:center;gap:12px;margin:20px 0" id="funStars">
+      <span class="fun-star" data-rating="1" onclick="selectStar(1)" style="font-size:40px;cursor:pointer;opacity:.4">😞</span>
+      <span class="fun-star" data-rating="2" onclick="selectStar(2)" style="font-size:40px;cursor:pointer;opacity:.4">😐</span>
+      <span class="fun-star" data-rating="3" onclick="selectStar(3)" style="font-size:40px;cursor:pointer;opacity:.4">🙂</span>
+      <span class="fun-star" data-rating="4" onclick="selectStar(4)" style="font-size:40px;cursor:pointer;opacity:.4">😄</span>
+      <span class="fun-star" data-rating="5" onclick="selectStar(5)" style="font-size:40px;cursor:pointer;opacity:.4">🤩</span>
+    </div>
+    <textarea id="funComment" class="input" placeholder="What would make MAF more fun? (optional)"
+              style="height:70px;resize:none;margin-bottom:12px;font-size:14px"></textarea>
+    <button class="btn btn-primary btn-lg" id="submitFunBtn" onclick="submitFunRating()" disabled style="width:100%">
+      Submit ✓
+    </button>
+    <button class="btn btn-ghost btn-sm mt-8" onclick="skipFunRating()" style="width:100%">
+      Skip
+    </button>
+  </div>
+</div>
+
+<!-- Celebration overlay -->
+<div class="celebrate-overlay" id="celebrateOverlay">
+  <div class="celebrate-emoji">🎮</div>
+  <div class="celebrate-title">You earned a Robux reward!</div>
+  <div class="celebrate-sub">Show this code to redeem:</div>
+  <div class="celebrate-code" id="celebrateCode">XXXX-YYYY-ZZZZ</div>
+  <button class="btn btn-primary btn-lg" onclick="closeCelebrate()">Awesome! 🎉</button>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav, updateMeter } from '../js/nav.js';
+import { makeProblem, normalizeTimeString, clockSVG, fmtMs, toast, playCorrect, playWrong } from '../js/utils.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { saveSession, addRobuxPoints, getRobuxProgress, claimCode, getParentSettings, calcPoints, updateStreak, getBadges, awardBadges, getSessions, getRedemptionHistory, getStreak } from '../js/firebase-service.js';
+import { MockAuth, MockSessions, MockRobux, MockParentSettings } from '../js/mock-service.js';
+import { evaluateBadges } from '../js/badges.js';
+import { notifyReward, notifyMilestone, notifyWeeklyDigest } from '../js/notifications.js';
+import { shouldShowFunRating, saveFunRating } from '../js/feedback.js';
+
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase ? JSON.parse(localStorage.getItem('maf_user')||'null') : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'workbook', showSidebar: true });
+
+const cfg = JSON.parse(localStorage.getItem('maf_setup') || '{}');
+const state = {
+  grade:      cfg.grade      || 3,
+  difficulty: cfg.difficulty || 'easy',
+  types:      cfg.types      || ['add','sub'],
+  total:      cfg.total      || 10,
+  avatar:     cfg.avatar     || 'assets/avatars/a1.svg',
+  idx: 0, correct: 0, streak: 0, times: [], current: null,
+  startedAt: 0, typeStats: {}, sessionPoints: 0
+};
+
+// ── SESSION RECOVERY ─────────────────────────────────────────
+const SESSION_KEY = 'maf_session_recovery_' + (user?.uid || 'guest');
+
+function saveSessionState() {
+  const snapshot = {
+    grade:        state.grade,
+    difficulty:   state.difficulty,
+    types:        state.types,
+    total:        state.total,
+    avatar:       state.avatar,
+    idx:          state.idx,
+    correct:      state.correct,
+    streak:       state.streak,
+    times:        state.times,
+    typeStats:    state.typeStats,
+    sessionPoints:state.sessionPoints,
+    savedAt:      Date.now()
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(snapshot));
+}
+
+function clearSessionState() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+function loadSavedSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    if (!saved) return null;
+    // Expire after 2 hours
+    if (Date.now() - saved.savedAt > 7200000) {
+      clearSessionState();
+      return null;
+    }
+    return saved;
+  } catch { return null; }
+}
+
+// Update avatar in nav
+const navAv = document.querySelector('.nav-avatar img');
+if (navAv) navAv.src = '../' + state.avatar;
+
+function renderProblem(p) {
+  const area = document.getElementById('problemArea');
+  document.getElementById('problemType').textContent =
+    `${p.type.replace(/_/g,' ')} · ${state.difficulty} · Grade ${state.grade}`;
+
+  if (p.mode === 'time-analog') {
+    area.innerHTML = `<div class="clock-wrap">${clockSVG(p.shown, 160)}<div class="problem-txt">${p.question}</div></div>`;
+  } else if (p.mode === 'time-digital') {
+    area.innerHTML = `<div class="problem-txt">${p.question}</div><div style="font-size:32px;margin-top:8px;color:var(--ora-lt)">🕒 ${p.shown}</div>`;
+  } else if (p.mode === 'choice' && p.choices) {
+    // Multiple choice — render buttons
+    area.innerHTML = `<div class="problem-txt">${p.question}</div>
+      <div id="choiceButtons" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;justify-content:center">
+        ${p.choices.map(c => `<button class="btn choice-btn" onclick="selectChoice('${c}')"
+          style="min-width:80px;font-size:16px">${c}</button>`).join('')}
+      </div>`;
+    // Hide text input, show choice UI
+    document.getElementById('answerInput').style.display = 'none';
+    document.getElementById('checkBtn').style.display = 'none';
+    document.getElementById('answerInput').value = '';
+    return; // choices handle their own flow
+  } else {
+    area.innerHTML = `<div class="problem-txt" id="problemTxt">${p.question}</div>`;
+  }
+
+  // Show correct input mode
+  setInputMode(p.mode || 'numeric');
+
+  // Show hint
+  const hintBox = document.getElementById('hintBox');
+  if (p.hint) {
+    hintBox.textContent = '💡 ' + p.hint;
+    hintBox.style.display = '';
+  } else {
+    hintBox.style.display = 'none';
+  }
+}
+
+// Handle multiple choice selection
+window.selectChoice = function(choice) {
+  const p = state.current;
+  if (!p) return;
+  // Highlight selected
+  document.querySelectorAll('.choice-btn').forEach(b => {
+    b.style.background = b.textContent.trim() === String(choice) ? 'var(--ora)' : '';
+    b.style.color = b.textContent.trim() === String(choice) ? 'var(--cream)' : '';
+  });
+  // Simulate check
+  document.getElementById('answerInput').value = String(choice);
+  setTimeout(() => check(), 300);
+};
+
+function nextProblem() {
+  if (state.idx >= state.total) { finish(); return; }
+  // Input mode is set by renderProblem → setInputMode
+  const p = makeProblem({ grade: state.grade, types: state.types, difficulty: state.difficulty });
+  state.current = p;
+  state.idx++;
+  document.getElementById('qBadge').textContent       = `${state.idx} / ${state.total}`;
+  document.getElementById('progressFill').style.width = `${((state.idx-1) / state.total) * 100}%`;
+  renderProblem(p);
+  document.getElementById('answerInput').value = '';
+  numpadReset();
+  if (p.mode === 'text') document.getElementById('answerInput').focus();
+  document.getElementById('tutorHintBox').textContent = 'Answer the problem and I\'ll help if you get stuck!';
+  state.startedAt = performance.now();
+}
+
+function parseAnswer(p, raw) {
+  if (p.mode === 'decimal') return parseFloat(raw);
+  if (p.mode === 'numeric') return parseInt(raw, 10);
+  if (p.mode === 'time-digital' || p.mode === 'time-analog') return normalizeTimeString(raw);
+  if (p.mode === 'text' || p.mode === 'choice') return raw.trim().toLowerCase();
+  return raw;
+}
+
+function isCorrect(p, val) {
+  if (p.mode === 'decimal') return Math.abs(val - p.answer) < 0.001;
+  if (p.mode === 'numeric') return val === p.answer;
+  if (p.mode === 'time-digital' || p.mode === 'time-analog')
+    return normalizeTimeString(String(val)) === normalizeTimeString(String(p.answer));
+  if (p.mode === 'text' || p.mode === 'choice')
+    return String(val).toLowerCase().trim() === String(p.answer).toLowerCase().trim();
+  return val === p.answer;
+}
+
+function updateTypePerfRows() {
+  const rows = Object.entries(state.typeStats).map(([type, s]) => {
+    const pct = s.total ? Math.round((s.correct / s.total) * 100) : 0;
+    const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+    return `<div class="type-perf-row">
+      <span style="font-size:12px;color:var(--cream-dk)">${type.replace('_',' ')}</span>
+      <div class="bar-bg" style="flex:1;height:4px;margin:0 8px"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span style="font-size:11px;color:${color}">${pct}%</span>
+    </div>`;
+  }).join('');
+  document.getElementById('typePerfRows').innerHTML = rows;
+}
+
+function check() {
+  // Get answer from numpad (numeric) or text input (text/word mode)
+  const p = state.current;
+  let raw;
+  if (p && (p.mode === 'numeric' || p.mode === 'decimal')) {
+    raw = document.getElementById('answerInputHidden').value.trim() || _numpadVal;
+  } else {
+    raw = document.getElementById('answerInput').value.trim();
+  }
+  const elapsed = performance.now() - state.startedAt;
+  state.times.push(elapsed);
+  const ans = parseAnswer(p, raw);
+  if (raw === '' || (p.mode === 'numeric' && isNaN(ans))) { toast('Enter an answer', 'wrong'); return; }
+
+  // Track per-type
+  if (!state.typeStats[p.type]) state.typeStats[p.type] = { correct: 0, total: 0, timeMs: [] };
+  state.typeStats[p.type].total++;
+  state.typeStats[p.type].timeMs.push(elapsed);
+
+  const pts = calcPoints(p.type, state.difficulty, state.grade, null);
+
+  if (isCorrect(p, ans)) {
+    state.correct++;
+    state.streak++;
+    state.sessionPoints += pts;
+    state.typeStats[p.type].correct++;
+    playCorrect();
+    toast(`✓ Correct! +${pts} pts`, 'correct');
+    document.getElementById('tutorHintBox').textContent = '🌟 Excellent! Keep it up!';
+  } else {
+    numpadFlash(false);
+    state.streak = 0;
+    playWrong();
+    toast(`✗ Answer: ${p.answer}`, 'wrong');
+    document.getElementById('tutorHintBox').textContent =
+      `The answer was ${p.answer}. ${p.hint ? '💡 ' + p.hint : 'Try the next one!'}`;
+  }
+
+  document.getElementById('liveCorrect').textContent = state.correct;
+  document.getElementById('liveStreak').textContent  = state.streak;
+  document.getElementById('streakBadge').textContent  = `${state.streak} streak`;
+  document.getElementById('timeBadge').textContent   = `Avg ${fmtMs(state.times.reduce((a,b)=>a+b,0)/state.times.length)}`;
+  updateTypePerfRows();
+  saveSessionState(); // Save after every answer for recovery
+  nextProblem();
+}
+
+async function finish() {
+  const accuracy   = Math.round((state.correct / state.total) * 100);
+  const avgTimeMs  = Math.round(state.times.reduce((a,b)=>a+b,0) / state.times.length);
+  const sessionData = {
+    accuracy, avgTimeMs, grade: state.grade, total: state.total,
+    difficulty: state.difficulty, types: state.types,
+    typeStats: state.typeStats, weightedPoints: state.sessionPoints
+  };
+
+  // Save session
+  if (useFirebase) {
+    await saveSession(user.uid, sessionData).catch(console.error);
+    await addRobuxPoints(user.uid, state.sessionPoints).catch(console.error);
+  } else {
+    MockSessions.save(user.uid, sessionData);
+    MockRobux.addPoints(user.uid, state.sessionPoints);
+  }
+
+  // Check threshold
+  const settings  = useFirebase
+    ? await getParentSettings(user.parentUid || user.uid).catch(() => null)
+    : MockParentSettings.get(user.parentUid || user.uid);
+  const threshold = settings?.threshold || 100;
+  const progress  = useFirebase
+    ? await getRobuxProgress(user.uid).catch(() => ({ points: 0 }))
+    : MockRobux.getProgress(user.uid);
+  const totalPts  = progress?.points || 0;
+  const pct       = Math.min(100, Math.round((totalPts / threshold) * 100));
+
+  // Show summary
+  clearSessionState(); // Session complete — no need to recover
+  document.getElementById('sessionArea').classList.add('hidden');
+  document.getElementById('summaryArea').classList.remove('hidden');
+  document.getElementById('sumAccuracy').textContent = accuracy + '%';
+  document.getElementById('sumAvg').textContent      = fmtMs(avgTimeMs);
+  document.getElementById('sumPoints').textContent   = '+' + state.sessionPoints;
+  document.getElementById('sumRobux').textContent    = `${pct}% toward next reward`;
+  document.getElementById('summaryEmoji').textContent = accuracy >= 90 ? '🌟' : accuracy >= 70 ? '🎉' : '💪';
+  document.getElementById('summaryTitle').textContent = accuracy >= 90 ? 'Amazing work!' : accuracy >= 70 ? 'Great job!' : 'Keep practicing!';
+
+  await updateMeter(user);
+
+  // ── STREAK + BADGE CHECK ──────────────────────────────────
+  try {
+    // Update streak
+    const newStreak = useFirebase
+      ? await updateStreak(user.uid)
+      : (() => {
+      const today = new Date().toISOString().split('T')[0];
+      const last  = localStorage.getItem('maf_streak_date');
+      const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+      let streak = parseInt(localStorage.getItem('maf_streak') || '0');
+      if (last === today) { /* no change */ }
+      else if (last === yesterday) { streak++; }
+      else { streak = 1; }
+      localStorage.setItem('maf_streak', streak);
+      localStorage.setItem('maf_streak_date', today);
+      return streak;
+    })();
+
+    // Build context for badge checking
+    const allSessions = useFirebase
+      ? await getSessions(user.uid, 50).catch(() => [])
+      : MockSessions.get(user.uid, 50);
+
+    const totalProblems  = allSessions.reduce((s, x) => s + (x.total || 0), 0);
+    const aggTypeStats = {};
+    allSessions.forEach(s => {
+      if (!s.typeStats) return;
+      Object.entries(s.typeStats).forEach(([t, st]) => {
+        if (!aggTypeStats[t]) aggTypeStats[t] = { correct:0, total:0 };
+        aggTypeStats[t].correct += st.correct || 0;
+        aggTypeStats[t].total   += st.total   || 0;
+      });
+    });
+    const existingBadges = useFirebase
+      ? await getBadges(user.uid)
+      : JSON.parse(localStorage.getItem("maf_badges_" + user.uid) || "[]");
+    const redemptionCount = useFirebase
+      ? (await getRedemptionHistory(user.uid).catch(() => [])).length
+      : MockRobux.getHistory(user.uid).length;
+
+    const context = {
+      session:         sessionData,
+      recentSessions:  allSessions,
+      streak:          newStreak,
+      totalProblems,
+      typeStats:       aggTypeStats,
+      redemptionCount
+    };
+
+    const newBadges = evaluateBadges(context, existingBadges);
+
+    if (newBadges.length) {
+      // Award badges in Firestore
+      const newIds = newBadges.map(b => b.id);
+      useFirebase
+        ? await awardBadges(user.uid, newIds)
+        : (() => {
+        const existing = JSON.parse(localStorage.getItem("maf_badges_" + user.uid) || "[]");
+        localStorage.setItem("maf_badges_" + user.uid, JSON.stringify([...new Set([...existing, ...newIds])]));
+      })();
+
+      // Show badge unlock overlays sequentially
+      window._badgeQueue = [...newBadges];
+      showNextBadge();
+    }
+
+    // Show streak on summary
+    if (newStreak > 1) {
+      const streakEl = document.getElementById('summaryTitle');
+      streakEl.textContent += ` ${newStreak} day streak! 🔥`;
+    }
+  } catch(e) { console.warn('Badge check failed:', e); }
+
+  // Fun rating check
+  const showFun = await shouldShowFunRating(user).catch(() => false);
+  if (showFun) {
+    setTimeout(() => {
+      document.getElementById('funRatingOverlay').classList.add('show');
+    }, 1200);
+  }
+
+  // Auto-claim if at threshold
+  if (totalPts >= threshold) {
+    try {
+      const result = useFirebase
+        ? await claimCode(user.uid)
+        : MockRobux.claimCode(user.uid, threshold);
+      document.getElementById('celebrateCode').textContent = result.code;
+      document.getElementById('celebrateOverlay').classList.add('show');
+      const { playFanfare } = await import('../js/utils.js');
+      playFanfare();
+      await updateMeter(user);
+    } catch (e) {
+      toast('🎁 You hit your goal! Go to Robux page to claim.', 'correct');
+    }
+  }
+}
+
+window.closeCelebrate = function() {
+  document.getElementById('celebrateOverlay').classList.remove('show');
+};
+
+// Badge queue display
+window._badgeQueue = [];
+function showNextBadge() {
+  if (!window._badgeQueue.length) return;
+  const badge = window._badgeQueue.shift();
+  document.getElementById('badgeEmoji').textContent = badge.emoji;
+  document.getElementById('badgeName').textContent  = badge.name;
+  document.getElementById('badgeDesc').textContent  = badge.desc;
+  document.getElementById('badgeOverlay').classList.add('show');
+}
+window.closeBadge = function() {
+  document.getElementById('badgeOverlay').classList.remove('show');
+  // Show next badge if queued
+  setTimeout(() => showNextBadge(), 300);
+};
+
+// Fun rating functions
+let _funRating = 0;
+window.selectStar = function(rating) {
+  _funRating = rating;
+  document.querySelectorAll('.fun-star').forEach((s, i) => {
+    s.style.opacity = i < rating ? '1' : '.3';
+  });
+  document.getElementById('submitFunBtn').disabled = false;
+};
+window.submitFunRating = async function() {
+  const comment = document.getElementById('funComment').value.trim();
+  await saveFunRating(user, _funRating, comment);
+  document.getElementById('funRatingOverlay').classList.remove('show');
+};
+window.skipFunRating = function() {
+  document.getElementById('funRatingOverlay').classList.remove('show');
+};
+
+// ── NUMBER PAD ───────────────────────────────────────────────
+let _numpadVal = '';
+
+function numpadUpdate() {
+  const display = document.getElementById('numpadDisplay');
+  display.textContent = _numpadVal || '—';
+  display.classList.toggle('has-value', _numpadVal.length > 0);
+  // Sync to hidden input so check() can read it
+  document.getElementById('answerInputHidden').value = _numpadVal;
+}
+
+window.numpadKey = function(k) {
+  // Prevent multiple decimals
+  if (k === '.' && _numpadVal.includes('.')) return;
+  // Prevent leading zeros (except for decimals like 0.5)
+  if (k !== '.' && _numpadVal === '0') { _numpadVal = k; numpadUpdate(); return; }
+  _numpadVal += k;
+  numpadUpdate();
+};
+
+window.numpadDel = function() {
+  _numpadVal = _numpadVal.slice(0, -1);
+  numpadUpdate();
+};
+
+window.numpadNeg = function() {
+  if (_numpadVal.startsWith('-')) {
+    _numpadVal = _numpadVal.slice(1);
+  } else if (_numpadVal.length > 0) {
+    _numpadVal = '-' + _numpadVal;
+  }
+  numpadUpdate();
+};
+
+function numpadReset() {
+  _numpadVal = '';
+  numpadUpdate();
+  const display = document.getElementById('numpadDisplay');
+  display.classList.remove('correct', 'wrong', 'has-value');
+}
+
+function numpadFlash(correct) {
+  const display = document.getElementById('numpadDisplay');
+  display.classList.add(correct ? 'correct' : 'wrong');
+  setTimeout(() => {
+    display.classList.remove('correct', 'wrong');
+  }, 600);
+}
+
+// Show/hide numpad vs text input based on problem mode
+function setInputMode(mode) {
+  const numpad   = document.getElementById('numpadWrap');
+  const textRow  = document.getElementById('textInputRow');
+  const ansInput = document.getElementById('answerInput');
+
+  if (mode === 'numeric' || mode === 'decimal') {
+    numpad.classList.add('show');
+    textRow.style.display = 'none';
+    numpadReset();
+  } else if (mode === 'text') {
+    numpad.classList.remove('show');
+    textRow.style.display = '';
+    ansInput.value = '';
+    ansInput.focus();
+  } else if (mode === 'choice') {
+    numpad.classList.remove('show');
+    textRow.style.display = 'none';
+  } else {
+    // Default to numpad
+    numpad.classList.add('show');
+    textRow.style.display = 'none';
+    numpadReset();
+  }
+}
+
+// Expose functions called from inline onclick handlers
+window.check      = check;
+window.numpadKey  = numpadKey;
+window.numpadDel  = numpadDel;
+window.numpadNeg  = numpadNeg;
+
+// Wire up
+document.getElementById('checkBtn').addEventListener('click', check);
+document.getElementById('answerInput').addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+document.getElementById('voiceStrip').addEventListener('click', () => {
+  const p = state.current;
+  if (!p) return;
+  const hintBox = document.getElementById('tutorHintBox');
+  hintBox.textContent = p.hint ? `💡 ${p.hint}` : `Try working through it step by step. The answer is a number between 0 and 1000.`;
+  toast('Hint shown!');
+});
+
+// Check for saved session
+const savedSession = loadSavedSession();
+if (savedSession && savedSession.idx > 0 && savedSession.idx < savedSession.total) {
+  const banner = document.getElementById('resumeBanner');
+  const desc   = document.getElementById('resumeDesc');
+  banner.classList.remove('hidden');
+  const pct = Math.round((savedSession.idx / savedSession.total) * 100);
+  desc.textContent = `You were on problem ${savedSession.idx} of ${savedSession.total} (${pct}% done) · ${savedSession.sessionPoints} pts earned so far`;
+
+  document.getElementById('resumeBtn').addEventListener('click', () => {
+    // Restore state
+    Object.assign(state, {
+      grade:         savedSession.grade,
+      difficulty:    savedSession.difficulty,
+      types:         savedSession.types,
+      total:         savedSession.total,
+      idx:           savedSession.idx,
+      correct:       savedSession.correct,
+      streak:        savedSession.streak,
+      times:         savedSession.times,
+      typeStats:     savedSession.typeStats,
+      sessionPoints: savedSession.sessionPoints,
+    });
+    document.getElementById('liveCorrect').textContent = state.correct;
+    document.getElementById('liveStreak').textContent  = state.streak;
+    document.getElementById('streakBadge').textContent  = state.streak + ' streak';
+    banner.classList.add('hidden');
+    nextProblem();
+  });
+
+  document.getElementById('discardBtn').addEventListener('click', () => {
+    clearSessionState();
+    banner.classList.add('hidden');
+    nextProblem();
+  });
+} else {
+  nextProblem();
+}
+</script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(reg => console.log('[PWA] Service worker registered:', reg.scope))
+          .catch(err => console.warn('[PWA] Service worker failed:', err));
+      });
+    }
+  </script>
+
+</body>
+</html>
