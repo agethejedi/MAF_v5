@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAF — AI Tutor</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="manifest" href="../manifest.json">
+  <meta name="theme-color" content="#C9561E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="MAF">
+  <link rel="apple-touch-icon" href="../assets/icons/icon-152.png">
+  <style>
+    /* ── LAYOUT ───────────────────────────────────────────────── */
+    .tutor-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media(max-width:700px) { .tutor-layout { grid-template-columns: 1fr; } }
+
+    /* ── JARVIS HUD ───────────────────────────────────────────── */
+    .hud-container {
+      position: relative;
+      background: #0a0604;
+      border: 1px solid var(--edge);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 420px;
+      overflow: hidden;
+    }
+
+    /* Grid background */
+    .hud-container::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(201,86,30,.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(201,86,30,.06) 1px, transparent 1px);
+      background-size: 28px 28px;
+      pointer-events: none;
+    }
+
+    /* Corner brackets */
+    .hud-corner {
+      position: absolute; width: 20px; height: 20px;
+      border-color: var(--ora); border-style: solid; opacity: .6;
+    }
+    .hud-corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+    .hud-corner.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+    .hud-corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
+    .hud-corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+
+    /* Status labels */
+    .hud-label {
+      position: absolute; font-size: 9px; letter-spacing: .12em;
+      font-family: 'Courier New', monospace; color: var(--ora);
+      text-transform: uppercase; opacity: .7;
+    }
+    .hud-label.tl { top: 12px; left: 34px; }
+    .hud-label.tr { top: 12px; right: 34px; }
+    .hud-label.bl { bottom: 12px; left: 34px; }
+    .hud-label.br { bottom: 12px; right: 34px; }
+
+    /* Orb */
+    .hud-orb-wrap {
+      position: relative;
+      width: 180px; height: 180px;
+      margin: 30px auto 20px;
+      cursor: pointer;
+    }
+
+    /* Tick ring */
+    .hud-tick-ring {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+    }
+
+    /* Main orb */
+    .hud-orb {
+      position: absolute;
+      inset: 20px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%,
+        #e8824a 0%, #C9561E 40%, #8B3A10 80%, #4a1e08 100%);
+      box-shadow:
+        0 0 30px rgba(201,86,30,.4),
+        0 0 60px rgba(201,86,30,.15),
+        inset 0 0 20px rgba(0,0,0,.3);
+      display: flex; align-items: center; justify-content: center;
+      transition: box-shadow .3s;
+    }
+
+    .hud-orb.listening {
+      box-shadow:
+        0 0 40px rgba(176,48,32,.7),
+        0 0 80px rgba(176,48,32,.3),
+        inset 0 0 20px rgba(0,0,0,.3);
+      animation: orb-pulse 1s ease-in-out infinite alternate;
+    }
+    .hud-orb.processing {
+      animation: orb-rotate 2s linear infinite;
+    }
+    .hud-orb.responding {
+      box-shadow:
+        0 0 40px rgba(90,138,60,.6),
+        0 0 80px rgba(90,138,60,.2),
+        inset 0 0 20px rgba(0,0,0,.3);
+      animation: orb-breathe 1.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes orb-pulse {
+      from { transform: scale(1); }
+      to   { transform: scale(1.06); }
+    }
+    @keyframes orb-rotate {
+      from { filter: hue-rotate(0deg); }
+      to   { filter: hue-rotate(30deg); }
+    }
+    @keyframes orb-breathe {
+      from { transform: scale(1); }
+      to   { transform: scale(1.04); }
+    }
+
+    .hud-pi {
+      font-size: 42px; color: #F5EDD8;
+      font-family: 'Georgia', serif; font-weight: 700;
+      text-shadow: 0 2px 8px rgba(0,0,0,.5);
+      user-select: none;
+    }
+
+    /* Outer ring with tick marks */
+    .hud-outer-ring {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 1.5px solid rgba(201,86,30,.3);
+    }
+
+    .hud-outer-ring.active {
+      border-color: rgba(201,86,30,.7);
+      animation: ring-spin 8s linear infinite;
+    }
+
+    @keyframes ring-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* State text */
+    .hud-state {
+      font-family: 'Courier New', monospace;
+      font-size: 11px; letter-spacing: .15em;
+      color: var(--ora); text-transform: uppercase;
+      margin-bottom: 8px; min-height: 16px;
+    }
+    .hud-state.listening { color: #e06050; }
+    .hud-state.processing { color: var(--amber); animation: blink .8s step-end infinite; }
+    .hud-state.responding { color: #8fcf5a; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* State buttons */
+    .hud-buttons {
+      display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; justify-content: center;
+    }
+    .hud-btn {
+      padding: 6px 14px; border-radius: 4px;
+      border: 1px solid rgba(201,86,30,.4);
+      background: transparent; color: rgba(245,237,216,.5);
+      font-family: 'Courier New', monospace;
+      font-size: 10px; letter-spacing: .1em;
+      cursor: pointer; transition: all .15s;
+    }
+    .hud-btn:hover { border-color: var(--ora); color: var(--ora-lt); }
+    .hud-btn.active {
+      border-color: var(--ora); color: var(--ora-lt);
+      background: rgba(201,86,30,.12);
+    }
+
+    /* Voice indicator dots */
+    .hud-voice-dots {
+      display: flex; gap: 4px; margin-top: 8px;
+      height: 20px; align-items: center;
+    }
+    .voice-dot {
+      width: 4px; border-radius: 2px;
+      background: var(--ora); opacity: .3;
+      transition: all .1s;
+    }
+
+    /* ── CHAT PANEL ───────────────────────────────────────────── */
+    .chat-panel {
+      display: flex; flex-direction: column;
+      height: 520px;
+    }
+    .chat-thread-wrap {
+      flex: 1; overflow-y: auto;
+      padding-right: 4px; margin-bottom: 10px;
+    }
+    .chat-thread { display: flex; flex-direction: column; gap: 10px; }
+
+    /* SVG diagram rendering */
+    .svg-diagram {
+      background: var(--bg); border: 1px solid var(--edge);
+      border-radius: var(--radius-sm); padding: 12px;
+      margin-top: 8px; overflow: auto;
+    }
+    .svg-diagram svg { max-width: 100%; height: auto; }
+
+    .typing-indicator { display: flex; gap: 4px; padding: 8px 12px; }
+    .typing-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--muted);
+      animation: typing .8s ease-in-out infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: .15s; }
+    .typing-dot:nth-child(3) { animation-delay: .3s; }
+    @keyframes typing {
+      0%,100% { opacity: .3; transform: translateY(0); }
+      50%      { opacity: 1;  transform: translateY(-4px); }
+    }
+
+    .voice-select-wrap { margin-bottom: 10px; }
+    .text-input-row { display: flex; gap: 8px; }
+  </style>
+</head>
+<body>
+<nav class="topnav" id="topnav"></nav>
+<div class="page">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="section-title">🤖 AI Tutor</div>
+    <div class="section-sub">Talk or type — I'll help you understand any math topic!</div>
+
+    <div class="tutor-layout">
+
+      <!-- LEFT: Jarvis HUD -->
+      <div class="hud-container" id="hudContainer">
+        <!-- Corner brackets -->
+        <div class="hud-corner tl"></div>
+        <div class="hud-corner tr"></div>
+        <div class="hud-corner bl"></div>
+        <div class="hud-corner br"></div>
+
+        <!-- Status labels -->
+        <div class="hud-label tl" id="hudStatusLabel">MAF.STANDBY</div>
+        <div class="hud-label tr" id="hudSessionId">0x4A.7F2C</div>
+        <div class="hud-label bl">v5.0.0</div>
+        <div class="hud-label br" id="hudOnline">● ONLINE</div>
+
+        <!-- Orb -->
+        <div class="hud-orb-wrap" id="orbWrap" onclick="handleOrbClick()">
+          <div class="hud-outer-ring" id="outerRing"></div>
+          <div class="hud-orb" id="mainOrb">
+            <div class="hud-pi">π</div>
+          </div>
+        </div>
+
+        <!-- State indicator -->
+        <div class="hud-state" id="hudState">STANDBY</div>
+
+        <!-- Voice dots -->
+        <div class="hud-voice-dots" id="voiceDots">
+          <div class="voice-dot" id="dot-0" style="height:8px"></div>
+          <div class="voice-dot" id="dot-1" style="height:11px"></div>
+          <div class="voice-dot" id="dot-2" style="height:14px"></div>
+          <div class="voice-dot" id="dot-3" style="height:17px"></div>
+          <div class="voice-dot" id="dot-4" style="height:8px"></div>
+          <div class="voice-dot" id="dot-5" style="height:11px"></div>
+          <div class="voice-dot" id="dot-6" style="height:14px"></div>
+          <div class="voice-dot" id="dot-7" style="height:17px"></div>
+          <div class="voice-dot" id="dot-8" style="height:8px"></div>
+          <div class="voice-dot" id="dot-9" style="height:11px"></div>
+          <div class="voice-dot" id="dot-10" style="height:14px"></div>
+          <div class="voice-dot" id="dot-11" style="height:17px"></div>
+        </div>
+
+        <!-- Mode buttons -->
+        <div class="hud-buttons">
+          <button class="hud-btn active" id="btnStandby" onclick="setHudMode('standby')">STANDBY</button>
+          <button class="hud-btn" id="btnListening" onclick="handleOrbClick()">LISTENING</button>
+          <button class="hud-btn" id="btnProcessing">PROCESSING</button>
+          <button class="hud-btn" id="btnResponding">RESPONDING</button>
+        </div>
+
+        <div style="font-size:10px;color:rgba(201,86,30,.4);font-family:monospace;margin-top:8px;text-align:center">
+          TAP ORB TO SPEAK · TYPE BELOW TO CHAT
+        </div>
+      </div>
+
+      <!-- RIGHT: Chat -->
+      <div class="card chat-panel">
+        <div class="card-title mb-8">Conversation</div>
+
+        <!-- Voice selector -->
+        <div class="voice-select-wrap">
+          <select id="voiceSelect" class="input" style="font-size:12px"></select>
+        </div>
+
+        <div class="chat-thread-wrap">
+          <div class="chat-thread" id="chatThread">
+            <div class="bubble">
+              Hey! I'm your AI math tutor 🎓 Tap the orb or type below. What would you like to work on?
+            </div>
+          </div>
+        </div>
+
+        <div class="text-input-row">
+          <input class="input" id="chatInput" placeholder="Type a question..."
+                 style="flex:1" autocomplete="off">
+          <button class="btn btn-primary btn-sm" id="sendBtn">Send</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Topic quick-start buttons -->
+    <div class="card mt-16">
+      <div class="card-title">Quick topics</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px" id="topicBtns"></div>
+    </div>
+
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module">
+import { renderNav } from '../js/nav.js';
+import { isFirebaseConfigured } from '../js/firebase-config.js';
+import { MockAuth, MockSessions } from '../js/mock-service.js';
+import { getSessions } from '../js/firebase-service.js';
+import { toast } from '../js/utils.js';
+
+const WORKER_URL = 'https://mafv5.agedotcom.workers.dev/chat';
+const useFirebase = isFirebaseConfigured();
+const user = useFirebase
+  ? JSON.parse(localStorage.getItem('maf_user') || 'null')
+  : MockAuth.current();
+if (!user) { location.href = '../login.html'; }
+
+await renderNav({ activePage: 'tutor', showSidebar: true });
+
+const profile = JSON.parse(localStorage.getItem('maf_profile') || '{}');
+const childName = profile.username || 'there';
+
+// ── PERFORMANCE DATA ──────────────────────────────────────────
+const sessions = useFirebase
+  ? await getSessions(user.uid, 30).catch(() => [])
+  : MockSessions.get(user.uid, 30);
+
+const typeMap = {};
+sessions.forEach(s => {
+  if (!s.typeStats) return;
+  Object.entries(s.typeStats).forEach(([t, stats]) => {
+    if (!typeMap[t]) typeMap[t] = { correct: 0, total: 0 };
+    typeMap[t].correct += stats.correct || 0;
+    typeMap[t].total   += stats.total   || 0;
+  });
+});
+
+const sorted = Object.entries(typeMap)
+  .filter(([, v]) => v.total > 0)
+  .sort((a, b) => (a[1].correct / a[1].total) - (b[1].correct / b[1].total));
+
+const weakestType = sorted[0]?.[0]?.replace(/_/g, ' ') || 'math';
+const perfSummary = sorted.length
+  ? sorted.map(([t, s]) => `${t}: ${Math.round(s.correct / s.total * 100)}%`).join(', ')
+  : 'no data yet';
+
+// ── TOPIC BUTTONS ─────────────────────────────────────────────
+const TOPICS = ['Addition','Subtraction','Multiplication','Division',
+  'Place Value','Rounding','Fractions','Decimals','Percentages',
+  'Word Problems','Algebra','Geometry','Elapsed Time'];
+
+document.getElementById('topicBtns').innerHTML = TOPICS.map(t =>
+  `<button class="btn btn-sm" onclick="startLesson('${t}')">${t}</button>`
+).join('');
+
+// ── HUD STATE MACHINE ─────────────────────────────────────────
+let hudMode = 'standby';
+
+const modeConfig = {
+  standby:    { label: 'MAF.STANDBY',    state: 'STANDBY',    orbClass: '',           ringActive: false, dotsActive: false },
+  listening:  { label: 'MAF.LISTENING',  state: 'LISTENING',  orbClass: 'listening',  ringActive: true,  dotsActive: true  },
+  processing: { label: 'MAF.PROCESSING', state: 'PROCESSING', orbClass: 'processing', ringActive: true,  dotsActive: false },
+  responding: { label: 'MAF.RESPONDING', state: 'RESPONDING', orbClass: 'responding', ringActive: true,  dotsActive: true  },
+};
+
+window.setHudMode = function(mode) {
+  hudMode = mode;
+  const cfg = modeConfig[mode];
+
+  // Update labels
+  document.getElementById('hudStatusLabel').textContent = cfg.label;
+  const stateEl = document.getElementById('hudState');
+  stateEl.textContent  = cfg.state;
+  stateEl.className    = 'hud-state ' + (mode === 'standby' ? '' : mode);
+
+  // Update orb
+  const orb = document.getElementById('mainOrb');
+  orb.className = 'hud-orb ' + (mode === 'standby' ? '' : mode);
+
+  // Update ring
+  const ring = document.getElementById('outerRing');
+  ring.className = 'hud-outer-ring' + (cfg.ringActive ? ' active' : '');
+
+  // Update buttons
+  ['standby','listening','processing','responding'].forEach(m => {
+    const btn = document.getElementById('btn' + m.charAt(0).toUpperCase() + m.slice(1));
+    if (btn) btn.classList.toggle('active', m === mode);
+  });
+
+  // Animate voice dots
+  animateDots(cfg.dotsActive);
+};
+
+let dotsInterval = null;
+function animateDots(active) {
+  clearInterval(dotsInterval);
+  const dots = document.querySelectorAll('.voice-dot');
+  if (!active) {
+    dots.forEach((d, i) => {
+      d.style.height = (8 + i % 3 * 4) + 'px';
+      d.style.opacity = '.15';
+    });
+    return;
+  }
+  dotsInterval = setInterval(() => {
+    dots.forEach(d => {
+      d.style.height = (6 + Math.random() * 18) + 'px';
+      d.style.opacity = (.3 + Math.random() * .7).toFixed(2);
+    });
+  }, 80);
+}
+
+// ── VOICE SETUP ───────────────────────────────────────────────
+let voices = [];
+let selectedVoice = null;
+const synth = window.speechSynthesis;
+let recognition = null;
+let isListening = false;
+let isSpeaking = false;
+
+function loadVoices() {
+  voices = synth.getVoices();
+  const select = document.getElementById('voiceSelect');
+  select.innerHTML = '';
+  const preferred = ['Samantha','Google UK English Female','Microsoft Zira','Karen','Moira'];
+  const english = voices.filter(v => v.lang.startsWith('en'));
+  const sorted = [
+    ...english.filter(v => preferred.some(p => v.name.includes(p))),
+    ...english.filter(v => !preferred.some(p => v.name.includes(p)))
+  ];
+  sorted.forEach((v, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${v.name} (${v.lang})`;
+    select.appendChild(opt);
+  });
+  selectedVoice = sorted[0] || voices[0];
+  select.addEventListener('change', e => { selectedVoice = sorted[parseInt(e.target.value)]; });
+}
+if (synth.onvoiceschanged !== undefined) synth.onvoiceschanged = loadVoices;
+loadVoices();
+
+function stripForSpeech(text) {
+  return text
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F100}-\u{1F1FF}\u{1F900}-\u{1F9FF}]/gu, '')
+    .replace(/\*\*/g, '').replace(/\*/g, '').replace(/#{1,6}\s/g, '')
+    .replace(/<[^>]+>/g, '') // strip HTML/SVG tags
+    .replace(/\s+/g, ' ').trim();
+}
+
+function speak(text) {
+  const clean = stripForSpeech(text);
+  synth.cancel();
+  const utt   = new SpeechSynthesisUtterance(clean);
+  utt.voice   = selectedVoice;
+  utt.rate    = 0.92;
+  utt.pitch   = 1.05;
+  utt.volume  = 1;
+  utt.onstart = () => { isSpeaking = true; setHudMode('responding'); };
+  utt.onend   = () => { isSpeaking = false; setHudMode('standby'); };
+  utt.onerror = () => { isSpeaking = false; setHudMode('standby'); };
+  synth.speak(utt);
+}
+
+// ── ORB CLICK HANDLER ─────────────────────────────────────────
+window.handleOrbClick = function() {
+  if (isSpeaking) { synth.cancel(); setHudMode('standby'); return; }
+  if (isListening) { recognition?.stop(); isListening = false; setHudMode('standby'); return; }
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Voice not supported. Try Chrome or Safari!', 'wrong'); return; }
+
+  recognition = new SR();
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  recognition.onstart = () => { isListening = true; setHudMode('listening'); };
+  recognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    isListening = false;
+    setHudMode('processing');
+    addBubble(transcript, true);
+    sendToTutor(transcript, false);
+  };
+  recognition.onerror = (e) => {
+    isListening = false; setHudMode('standby');
+    if (e.error !== 'aborted') toast('Could not hear you. Try again!', 'wrong');
+  };
+  recognition.onend = () => { isListening = false; };
+  recognition.start();
+};
+
+// ── CHAT ──────────────────────────────────────────────────────
+const chatHistory = [];
+
+function addBubble(text, isUser = false, isTyping = false) {
+  const thread = document.getElementById('chatThread');
+  const div = document.createElement('div');
+
+  if (isTyping) {
+    div.id = 'typingIndicator';
+    div.className = 'bubble';
+    div.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+  } else {
+    div.className = 'bubble' + (isUser ? ' user' : '');
+    // Check for SVG diagram tags
+    if (text.includes('<svg-diagram>')) {
+      const svgMatch = text.match(/<svg-diagram>([\s\S]*?)<\/svg-diagram>/i);
+      if (svgMatch) {
+        const cleanText = text.replace(/<svg-diagram>[\s\S]*?<\/svg-diagram>/i, '').trim();
+        const textPart = cleanText ? `<div style="margin-bottom:8px">${cleanText}</div>` : '';
+        div.innerHTML = textPart + `<div class="svg-diagram">${svgMatch[1]}</div>`;
+      } else {
+        // Malformed svg-diagram tag — just show text without tags
+        div.textContent = text.replace(/<\/?svg-diagram>/gi, '');
+      }
+    } else if (text.includes('<svg')) {
+      // Direct SVG without wrapper tags
+      const svgMatch = text.match(/(<svg[\s\S]*?<\/svg>)/i);
+      if (svgMatch) {
+        const cleanText = text.replace(/<svg[\s\S]*?<\/svg>/i, '').trim();
+        div.innerHTML = (cleanText ? `<div style="margin-bottom:8px">${cleanText}</div>` : '') +
+          `<div class="svg-diagram">${svgMatch[1]}</div>`;
+      } else {
+        div.textContent = text;
+      }
+    } else {
+      div.textContent = text;
+    }
+  }
+
+  thread.appendChild(div);
+  thread.parentElement.scrollTop = thread.parentElement.scrollHeight;
+  return div;
+}
+
+const SYSTEM_PROMPT = `You are a friendly, encouraging math tutor for a student named ${childName}.
+Keep responses SHORT - maximum 3-4 sentences. Use simple language.
+Do NOT use emoji - responses will be read aloud.
+The student's recent performance: ${perfSummary}.
+Their weakest area is: ${weakestType}.
+When explaining concepts that benefit from a visual diagram, generate a clean SVG diagram wrapped in <svg-diagram></svg-diagram> tags.
+SVG should use: background fill #2C1A0E, stroke color #F5EDD8, text fill #F5EDD8, accent color #C9561E.
+Keep SVGs simple and clear - number lines, fraction bars, geometric shapes, clocks, coordinate planes.
+Always end with a question or practice problem for the student.`;
+
+async function sendToTutor(userMsg, addUserBubble = true) {
+  if (addUserBubble) addBubble(userMsg, true);
+  chatHistory.push({ role: 'user', content: userMsg });
+  setHudMode('processing');
+  addBubble('', false, true);
+
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: SYSTEM_PROMPT,
+        messages: chatHistory,
+        max_tokens: 400
+      })
+    });
+
+    const data  = await res.json();
+    const reply = data.content?.[0]?.text || "Hmm, I didn't catch that. Try again!";
+
+    document.getElementById('typingIndicator')?.remove();
+    addBubble(reply);
+    chatHistory.push({ role: 'assistant', content: reply });
+    speak(reply);
+
+  } catch(e) {
+    document.getElementById('typingIndicator')?.remove();
+    const err = "I'm having trouble connecting. Try again in a moment!";
+    addBubble(err);
+    speak(err);
+    setHudMode('standby');
+  }
+}
+
+window.startLesson = function(topic) {
+  synth.cancel();
+  addBubble(`Let's work on ${topic}!`, true);
+  sendToTutor(`I want to learn about ${topic}. Please explain it to me and give me a visual diagram if it helps.`, false);
+};
+
+// Text send
+document.getElementById('sendBtn').addEventListener('click', () => {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  sendToTutor(msg);
+});
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('sendBtn').click();
+});
+
+// URL param — start from tutorial
+const urlParams = new URLSearchParams(window.location.search);
+const tutorialId = urlParams.get('tutorial');
+if (tutorialId) {
+  setTimeout(() => startLesson(tutorialId.replace(/_/g, ' ')), 600);
+}
+
+// Generate random session ID for HUD display
+document.getElementById('hudSessionId').textContent =
+  '0x' + Math.random().toString(16).substr(2,4).toUpperCase() + '.' +
+  Math.random().toString(16).substr(2,4).toUpperCase();
+</script>
+</body>
+</html>
